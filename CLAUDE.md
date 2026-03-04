@@ -2,12 +2,23 @@
 
 ## Overview
 
-General-purpose CLI utility library written in Rust (edition 2024). Provides terminal output abstractions, ANSI color helpers, a rainbow colorizer, terminal width detection, and a full shell execution abstraction with spinner overlay rendering. Consumed by `vr` and intended to grow as other CLI tools extract shared logic here.
+**Public crate.** General-purpose CLI utility library written in Rust (edition 2024). Published to [crates.io](https://crates.io) and intended for use by any Rust CLI project, not just internal tools.
+
+Provides terminal output abstractions, ANSI color helpers, a rainbow colorizer, terminal width detection, a full shell execution abstraction with spinner overlay rendering, cross-platform filesystem helpers, and general string/path utilities. Currently consumed by `vr` and `filebydaterust`.
+
+### Public API contract
+
+Because this is a published crate, **all `pub` items are part of the public API**:
+
+- Prefer additive changes; avoid removing or renaming `pub` items without a semver major bump
+- New modules must be deliberately `pub` — do not expose internal helpers by accident
+- Keep doc comments on all public items; they appear on docs.rs
 
 ## Build & Test
 
 - `cargo build` / `cargo test`
 - `cargo run --example test_shell` — visual demo of all shell output modes and spinner behaviors
+- `cargo publish --dry-run` — verify the crate packages cleanly before a real publish
 
 ## Architecture
 
@@ -18,6 +29,9 @@ General-purpose CLI utility library written in Rust (edition 2024). Provides ter
 - `terminal.rs` — terminal width detection (`terminal_width() -> usize`; returns 80 if undetermined)
 - `output.rs` — `Output` trait, `OutputMode`, `ConsoleOutput` (production), `StringOutput` (test helper)
 - `shell/` — shell execution abstraction: `Shell` trait, `ProcessShell`, `DryRunShell`, `MockShell`, `CommandResult`, `ShellError`, `ShellConfig`; internal `exec.rs` (three output modes), `overlay.rs` (spinner frame rendering), `scripted.rs` (`ScriptedShell` for visual regression tests)
+- `str_utils.rs` — general string/path utilities: `path_to_string(path) -> String`, `plural(n) -> &str`
+- `fs_utils.rs` — cross-platform filesystem helpers: `same_file`, `same_content`, `make_executable`, `remove_symlink_dir_like`
+- `version.rs` — shared version string formatting: `version_string(build_date, git_hash) -> String`
 
 ### `Output` trait (`output.rs`)
 
@@ -139,7 +153,15 @@ These delegate to real OS behavior regardless of which `Shell` implementation is
 
 - `terminal_size` for terminal width detection
 - `thiserror` for error types
-- Dev: `rstest`
+- Dev: `rstest`, `tempfile`
+
+### Dependency policy
+
+This is a public crate — keep the dependency footprint small and deliberate:
+
+- Prefer `std` over adding a new dependency for small utilities
+- Every new dependency increases compile time and supply-chain surface for all downstream consumers; justify additions in the PR/commit
+- Dev-only dependencies (behind `[dev-dependencies]`) are fine to add freely
 
 ## What Belongs Here vs. Elsewhere
 
