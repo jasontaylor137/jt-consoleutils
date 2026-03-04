@@ -99,14 +99,9 @@ pub fn create(dry_run: bool) -> Box<dyn Shell> {
 // ---------------------------------------------------------------------------
 
 /// Production shell: delegates to the free functions in this module.
+#[derive(Default)]
 pub struct ProcessShell {
    pub config: ShellConfig
-}
-
-impl Default for ProcessShell {
-   fn default() -> Self {
-      Self { config: ShellConfig::default() }
-   }
 }
 
 impl Shell for ProcessShell {
@@ -172,14 +167,9 @@ impl Shell for ProcessShell {
 /// Dry-run shell: logs what would be executed and returns fake success.
 /// Probe methods (command_exists, command_output) delegate to real implementations
 /// because they are read-only and safe to call.
+#[derive(Default)]
 pub struct DryRunShell {
    pub config: ShellConfig
-}
-
-impl Default for DryRunShell {
-   fn default() -> Self {
-      Self { config: ShellConfig::default() }
-   }
 }
 
 impl Shell for DryRunShell {
@@ -237,6 +227,12 @@ pub struct MockShell {
    /// Queue of results for `exec_capture` calls; pops front on each call.
    /// If empty, falls back to `CommandResult { success: run_success, stderr: "" }`.
    pub exec_capture_results: std::cell::RefCell<std::collections::VecDeque<CommandResult>>
+}
+
+impl Default for MockShell {
+   fn default() -> Self {
+      Self::new()
+   }
 }
 
 impl MockShell {
