@@ -12,4 +12,4 @@ normalize_doc_attributes = true
 merge_derives = true
 blank_lines_upper_bound = 1
 newline_style = "Unix"
-trailing_comma = "Never"
+trailing_comma = "never"

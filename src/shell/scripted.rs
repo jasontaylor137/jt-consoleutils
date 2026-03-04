@@ -42,6 +42,12 @@ pub struct Script {
    success: bool
 }
 
+impl Default for Script {
+   fn default() -> Self {
+      Self::new()
+   }
+}
+
 impl Script {
    pub fn new() -> Self {
       Self { events: Vec::new(), success: true }
@@ -130,6 +136,12 @@ impl Script {
 pub struct ScriptedShell {
    scripts: RefCell<VecDeque<Script>>,
    config: ShellConfig
+}
+
+impl Default for ScriptedShell {
+   fn default() -> Self {
+      Self::new()
+   }
 }
 
 impl ScriptedShell {

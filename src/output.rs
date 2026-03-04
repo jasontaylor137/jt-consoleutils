@@ -2,17 +2,11 @@
 // OutputMode
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct OutputMode {
    pub verbose: bool,
    pub quiet: bool,
    pub dry_run: bool
-}
-
-impl Default for OutputMode {
-   fn default() -> Self {
-      Self { verbose: false, quiet: false, dry_run: false }
-   }
 }
 
 impl OutputMode {
