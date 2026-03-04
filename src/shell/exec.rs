@@ -49,6 +49,7 @@ pub fn run_command(
     args: &[&str],
     output: &mut dyn Output,
     mode: OutputMode,
+    viewport_size: usize,
 ) -> Result<CommandResult, ShellError> {
     if mode.is_quiet() {
         return run_quiet(program, args);
@@ -56,7 +57,7 @@ pub fn run_command(
     if mode.is_verbose() {
         return run_verbose(label, program, args, output, mode);
     }
-    run_overlay(label, program, args, output)
+    run_overlay(label, program, args, output, viewport_size)
 }
 
 /// Run a command with stdout and stderr inherited from the parent process.
@@ -140,13 +141,14 @@ fn run_overlay(
     program: &str,
     args: &[&str],
     output: &mut dyn Output,
+    viewport_size: usize,
 ) -> Result<CommandResult, ShellError> {
     let SpawnedCommand {
         child,
         lines,
         readers,
     } = spawn_command_with_lines(program, args)?;
-    let rendered = render_overlay_lines(label, lines);
+    let rendered = render_overlay_lines(label, lines, viewport_size);
     let status = wait_and_join(program, child, readers)?;
     output.step_result(
         label,
@@ -163,7 +165,11 @@ fn run_overlay(
 /// Drive the animated spinner overlay from a pre-built line receiver.
 /// Returns viewport, collected stderr lines, and elapsed time.
 /// Callers are responsible for calling `output.step_result` afterward.
-pub(super) fn render_overlay_lines(label: &str, lines: mpsc::Receiver<Line>) -> RenderedOverlay {
+pub(super) fn render_overlay_lines(
+    label: &str,
+    lines: mpsc::Receiver<Line>,
+    viewport_size: usize,
+) -> RenderedOverlay {
     let mut stderr_lines: Vec<String> = Vec::new();
     let mut viewport: Vec<String> = Vec::new();
     let start = Instant::now();
@@ -172,7 +178,7 @@ pub(super) fn render_overlay_lines(label: &str, lines: mpsc::Receiver<Line>) -> 
         let stdout_handle = io::stdout();
         let mut out = stdout_handle.lock();
         let mut frame = 0usize;
-        let mut last_rows = overlay::render_frame(&mut out, label, &[], 0, 0);
+        let mut last_rows = overlay::render_frame(&mut out, label, &[], 0, 0, viewport_size);
 
         loop {
             match lines.recv_timeout(FRAME_INTERVAL) {
@@ -196,11 +202,25 @@ pub(super) fn render_overlay_lines(label: &str, lines: mpsc::Receiver<Line>) -> 
                         }
                     }
                     frame += 1;
-                    last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows);
+                    last_rows = overlay::render_frame(
+                        &mut out,
+                        label,
+                        &viewport,
+                        frame,
+                        last_rows,
+                        viewport_size,
+                    );
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     frame += 1;
-                    last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows);
+                    last_rows = overlay::render_frame(
+                        &mut out,
+                        label,
+                        &viewport,
+                        frame,
+                        last_rows,
+                        viewport_size,
+                    );
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }

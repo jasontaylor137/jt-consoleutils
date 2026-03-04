@@ -1,6 +1,5 @@
 use std::io::{self, Write};
 
-pub(super) const VIEWPORT_SIZE: usize = 5;
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 fn term_width() -> usize {
@@ -33,6 +32,7 @@ pub(super) fn render_frame(
     viewport: &[String],
     frame: usize,
     prev_lines: usize,
+    viewport_size: usize,
 ) -> usize {
     let tw = term_width();
 
@@ -54,7 +54,7 @@ pub(super) fn render_frame(
     // holding "line1\nline2" renders as two terminal rows.
     let visual_rows: Vec<&str> = viewport.iter().flat_map(|s| s.split('\n')).collect();
 
-    let shown_start = visual_rows.len().saturating_sub(VIEWPORT_SIZE);
+    let shown_start = visual_rows.len().saturating_sub(viewport_size);
     let shown = &visual_rows[shown_start..];
     for row in shown {
         let display = truncate_visible(row, tw.saturating_sub(2).max(1));
@@ -67,6 +67,127 @@ pub(super) fn render_frame(
 
     out.flush().unwrap();
     1 + shown.len()
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::truncate_visible;
+
+    // -----------------------------------------------------------------------
+    // Plain text (no ANSI)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn plain_text_shorter_than_limit_is_unchanged() {
+        assert_eq!(truncate_visible("hello", 10), "hello");
+    }
+
+    #[test]
+    fn plain_text_exactly_at_limit_is_unchanged() {
+        assert_eq!(truncate_visible("hello", 5), "hello");
+    }
+
+    #[test]
+    fn plain_text_longer_than_limit_is_truncated() {
+        assert_eq!(truncate_visible("hello world", 5), "hello");
+    }
+
+    #[test]
+    fn empty_string_returns_empty() {
+        assert_eq!(truncate_visible("", 10), "");
+    }
+
+    #[test]
+    fn zero_limit_returns_empty() {
+        assert_eq!(truncate_visible("hello", 0), "");
+    }
+
+    #[rstest]
+    #[case("abcde", 1, "a")]
+    #[case("abcde", 3, "abc")]
+    #[case("abcde", 5, "abcde")]
+    #[case("abcde", 6, "abcde")]
+    fn plain_text_parametrised(#[case] input: &str, #[case] max: usize, #[case] expected: &str) {
+        assert_eq!(truncate_visible(input, max), expected);
+    }
+
+    // -----------------------------------------------------------------------
+    // ANSI escape sequences don't count toward visible width
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ansi_bold_does_not_count_as_visible() {
+        // "\x1b[1m" is the bold CSI sequence; it has zero visible width.
+        // The trailing reset is beyond the visible limit and is dropped —
+        // the function documents that open sequences are left for the caller to close.
+        let input = "\x1b[1mhello\x1b[0m";
+        assert_eq!(truncate_visible(input, 5), "\x1b[1mhello");
+    }
+
+    #[test]
+    fn ansi_colour_does_not_count_as_visible() {
+        // "\x1b[32m" = green; 5 visible chars.
+        // Same as above: trailing reset is dropped once the limit is reached.
+        let input = "\x1b[32mhello\x1b[0m";
+        assert_eq!(truncate_visible(input, 5), "\x1b[32mhello");
+    }
+
+    #[test]
+    fn ansi_sequence_at_start_then_truncate_visible_chars() {
+        // Bold prefix + 10 visible chars; truncate to 4.
+        let input = "\x1b[1m0123456789\x1b[0m";
+        let result = truncate_visible(input, 4);
+        // The escape is preserved; only 4 visible chars included.
+        assert_eq!(result, "\x1b[1m0123");
+    }
+
+    #[test]
+    fn truncation_mid_text_after_escape_sequence() {
+        // "AB\x1b[31mCD" — 4 visible chars; truncate to 3.
+        let input = "AB\x1b[31mCD";
+        let result = truncate_visible(input, 3);
+        assert_eq!(result, "AB\x1b[31mC");
+    }
+
+    #[test]
+    fn multiple_escape_sequences_all_preserved_within_limit() {
+        // Two colour resets surrounding a word; fits within limit.
+        let input = "\x1b[2mfoo\x1b[0m";
+        assert_eq!(truncate_visible(input, 10), "\x1b[2mfoo\x1b[0m");
+    }
+
+    #[test]
+    fn escape_sequence_at_exact_boundary_is_dropped() {
+        // "hi\x1b[0m" — 2 visible chars then a reset; limit is 2.
+        // Once "hi" is written the visible counter hits the limit, so the loop
+        // exits before the escape is consumed — the trailing reset is dropped.
+        let input = "hi\x1b[0m";
+        let result = truncate_visible(input, 2);
+        assert_eq!(result, "hi");
+    }
+
+    #[test]
+    fn leading_escape_only_no_visible_chars_returns_escape() {
+        // A lone CSI sequence with no following text still passes through.
+        let input = "\x1b[1m";
+        assert_eq!(truncate_visible(input, 5), "\x1b[1m");
+    }
+
+    #[test]
+    fn lone_escape_byte_without_bracket_is_passed_through() {
+        // \x1b not followed by '[' is treated as a non-CSI escape: the byte is
+        // emitted but no further characters are consumed as part of a sequence.
+        // It still doesn't count as visible.
+        let input = "\x1babc";
+        // Only 'a','b','c' are visible. \x1b is passed through but not counted.
+        assert_eq!(truncate_visible(input, 2), "\x1bab");
+    }
 }
 
 /// Truncate `s` to at most `max_visible` visible columns, skipping over ANSI
