@@ -15,8 +15,9 @@
 ///
 /// let v = jt_consoleutils::version::version_string(BUILD_DATE, GIT_HASH);
 /// ```
+#[must_use]
 pub fn version_string(build_date: &str, git_hash: &str) -> String {
-   format!("{} ({})", build_date, git_hash)
+   format!("{build_date} ({git_hash})")
 }
 
 #[cfg(test)]

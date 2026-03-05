@@ -11,11 +11,11 @@ pub(super) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
    if n == 0 {
       return;
    }
-   write!(out, "\x1b[{}A", n).unwrap();
+   write!(out, "\x1b[{n}A").unwrap();
    for _ in 0..n {
       write!(out, "\r\x1b[K\n").unwrap();
    }
-   write!(out, "\x1b[{}A", n).unwrap();
+   write!(out, "\x1b[{n}A").unwrap();
 }
 
 /// Erase the previous frame (cursor-up + per-line clear), draw the spinner header and
@@ -37,11 +37,11 @@ pub(super) fn render_frame(
    let tw = term_width();
 
    if prev_lines > 0 {
-      write!(out, "\x1b[{}A", prev_lines).unwrap();
+      write!(out, "\x1b[{prev_lines}A").unwrap();
       for _ in 0..prev_lines {
          write!(out, "\r\x1b[K\n").unwrap();
       }
-      write!(out, "\x1b[{}A", prev_lines).unwrap();
+      write!(out, "\x1b[{prev_lines}A").unwrap();
    }
 
    let spinner = SPINNER[frame % SPINNER.len()];
@@ -202,9 +202,9 @@ fn truncate_visible(s: &str, max_visible: usize) -> String {
       if visible >= max_visible {
          break;
       }
+      out.push(ch);
       if ch == '\x1b' {
          // Consume the escape sequence without counting it as visible.
-         out.push(ch);
          // CSI sequences: \x1b[ ... <final byte in 0x40–0x7E>
          if chars.peek() == Some(&'[') {
             out.push(chars.next().unwrap());
@@ -216,7 +216,6 @@ fn truncate_visible(s: &str, max_visible: usize) -> String {
             }
          }
       } else {
-         out.push(ch);
          visible += 1;
       }
    }

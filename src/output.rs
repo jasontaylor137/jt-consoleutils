@@ -39,17 +39,20 @@ pub struct OutputMode {
 
 impl OutputMode {
    /// Returns `true` when verbose output is enabled.
-   pub fn is_verbose(self) -> bool {
+   #[must_use]
+   pub const fn is_verbose(self) -> bool {
       self.verbose
    }
 
    /// Returns `true` when quiet mode is active (all output suppressed).
-   pub fn is_quiet(self) -> bool {
+   #[must_use]
+   pub const fn is_quiet(self) -> bool {
       self.quiet
    }
 
    /// Returns `true` when dry-run mode is active.
-   pub fn is_dry_run(self) -> bool {
+   #[must_use]
+   pub const fn is_dry_run(self) -> bool {
       self.dry_run
    }
 }
@@ -123,7 +126,12 @@ fn format_elapsed(ms: u128) -> String {
 }
 
 fn with_prefix(prefix: &str, msg: &str) -> String {
-   msg.lines().map(|l| format!("{prefix}{l}\n")).collect()
+   use std::fmt::Write as _;
+   let mut out = String::new();
+   for l in msg.lines() {
+      let _ = writeln!(out, "{prefix}{l}");
+   }
+   out
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +150,8 @@ pub struct ConsoleOutput {
 
 impl ConsoleOutput {
    /// Create a new `ConsoleOutput` driven by `mode`.
-   pub fn new(mode: OutputMode) -> Self {
+   #[must_use]
+   pub const fn new(mode: OutputMode) -> Self {
       Self { mode }
    }
 }
@@ -237,11 +246,13 @@ pub struct StringOutput {
 
 impl StringOutput {
    /// Create a new, empty `StringOutput`.
-   pub fn new() -> Self {
+   #[must_use]
+   pub const fn new() -> Self {
       Self { buf: String::new() }
    }
 
    /// Return the full captured output as a string slice.
+   #[must_use]
    pub fn log(&self) -> &str {
       &self.buf
    }
@@ -252,6 +263,8 @@ impl Default for StringOutput {
       Self::new()
    }
 }
+
+use std::fmt::Write as _;
 
 impl Output for StringOutput {
    fn writeln(&mut self, line: &str) {
@@ -277,19 +290,19 @@ impl Output for StringOutput {
 
    fn step_result(&mut self, label: &str, success: bool, elapsed_ms: u128, _viewport: &[String]) {
       let symbol = if success { '✓' } else { '✗' };
-      self.buf.push_str(&format!("{symbol} {label} ({})\n", format_elapsed(elapsed_ms)));
+      let _ = writeln!(self.buf, "{symbol} {label} ({})", format_elapsed(elapsed_ms));
    }
 
    fn dry_run_shell(&mut self, cmd: &str) {
-      self.buf.push_str(&format!("[dry-run] would run: {cmd}\n"));
+      let _ = writeln!(self.buf, "[dry-run] would run: {cmd}");
    }
 
    fn dry_run_write(&mut self, path: &str) {
-      self.buf.push_str(&format!("[dry-run] would write: {path}\n"));
+      let _ = writeln!(self.buf, "[dry-run] would write: {path}");
    }
 
    fn dry_run_delete(&mut self, path: &str) {
-      self.buf.push_str(&format!("[dry-run] would delete: {path}\n"));
+      let _ = writeln!(self.buf, "[dry-run] would delete: {path}");
    }
 }
 

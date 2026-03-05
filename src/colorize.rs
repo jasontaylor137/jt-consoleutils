@@ -1,15 +1,16 @@
 //! Helpers to colorize text with a left-to-right rainbow.
 //!
-//! Provides:
-//! - `colorize_text_with_width(text, Option<usize>) -> String`
+//! Provides `colorize_text_with_width(text, Option<usize>) -> String`.
+//!
+//! If `rainbow_width` is `None` the rainbow spans the widest line in `text`.
+//! The output contains newline characters and ANSI escapes; print it directly.
 //!
 //! The functions emit 24-bit ANSI foreground escapes (`\x1b[38;2;R;G;Bm`).
-//! If `rainbow_width` is `None` the rainbow spans the widest line in `text`.
-//! The output contains newline characters and is ready to print.
 
 use crate::colors::RESET;
 
 /// Convert HSV (h in degrees 0..360, s and v in 0..1) to RGB bytes (0..255).
+#[allow(clippy::many_single_char_names)]
 fn hsv_to_rgb(h_deg: f32, s: f32, v: f32) -> (u8, u8, u8) {
    let h = (h_deg % 360.0 + 360.0) % 360.0;
    let c = v * s;
@@ -29,29 +30,34 @@ fn hsv_to_rgb(h_deg: f32, s: f32, v: f32) -> (u8, u8, u8) {
       (c, 0.0, x)
    };
    let m = v - c;
+   #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
    let r = ((r1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+   #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
    let g = ((g1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+   #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
    let b = ((b1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
    (r, g, b)
 }
 
 /// Create an ANSI 24-bit foreground escape for the given RGB bytes.
 fn ansi_rgb_escape(r: u8, g: u8, b: u8) -> String {
-   format!("\x1b[38;2;{};{};{}m", r, g, b)
+   format!("\x1b[38;2;{r};{g};{b}m")
 }
 
-/// Colorize the provided `text` with a left-to-right rainbow. If `rainbow_width`
-/// is `None` the rainbow will span the full width of the widest line. If a
-/// width is provided the gradient is computed across that width and repeats
-/// when lines are longer.
+/// Colorize the provided `text` with a left-to-right rainbow.
 ///
-/// The returned String contains newlines and ANSI escapes; print it directly.
+/// If `rainbow_width` is `None` the rainbow will span the full width of the
+/// widest line. If a width is provided the gradient is computed across that
+/// width and repeats when lines are longer.
+///
+/// The returned `String` contains newlines and ANSI escapes; print it directly.
+#[must_use]
 pub fn colorize_text_with_width(text: &str, rainbow_width: Option<usize>) -> String {
    // Split into lines and characters so we can index columns.
    let lines: Vec<String> = text.lines().map(str::to_owned).collect();
    let char_lines: Vec<Vec<char>> = lines.iter().map(|l| l.chars().collect()).collect();
 
-   let max_width = char_lines.iter().map(|l| l.len()).max().unwrap_or(0);
+   let max_width = char_lines.iter().map(Vec::len).max().unwrap_or(0);
    if max_width == 0 {
       // Nothing to color; return the original text unchanged.
       return text.to_string();
@@ -63,6 +69,7 @@ pub fn colorize_text_with_width(text: &str, rainbow_width: Option<usize>) -> Str
    // Build a palette of per-column colors across rainbow_w.
    let mut col_colors: Vec<String> = Vec::with_capacity(rainbow_w);
    for col in 0..rainbow_w {
+      #[allow(clippy::cast_precision_loss)]
       let t = (col as f32) / (rainbow_w.max(1) as f32); // 0..1
       // Map to hue (degrees). Phase can be tweaked if desired.
       let hue_deg = (t * 360.0) % 360.0;
