@@ -1,68 +1,46 @@
-//! Scaffolds `build.rs` and `rel.sh` for a new Rust CLI project that uses
+//! Scaffolds `build.rs` and `rel.sh` for a Rust CLI project that uses
 //! `jt-consoleutils` build support.
+//!
+//! Everything is inferred from the target project's `Cargo.toml`:
+//!
+//! - Binary name: first `[[bin]]` `name`, or `[package]` `name` as fallback
+//! - Windows `.exe` handling: inferred from presence of `[target.'cfg(windows)'.dependencies]`
 //!
 //! # Usage
 //!
 //! ```sh
-//! cargo run --example scaffold_project -- \
-//!   --binary-name mybinary \
-//!   --install aarch64-apple-darwin:~/.local/bin \
-//!   --install x86_64-unknown-linux-gnu:/var/home/jason/.local/bin \
-//!   --install x86_64-pc-windows-msvc:/c/Users/jason/.local/bin \
-//!   --windows-exe
+//! cargo run --example scaffold_project -- --project-dir ../my-project
+//! cargo run --example scaffold_project -- --project-dir ../my-project --force
 //! ```
-//!
-//! Run from the root of the project you want to scaffold, or pass `--output-dir`
-//! to specify a destination. Files will NOT be overwritten unless `--force` is given.
 
-use std::{collections::BTreeMap, fmt::Write as FmtWrite, fs, path::PathBuf, process};
+use std::{
+   fmt::Write as FmtWrite,
+   fs,
+   path::{Path, PathBuf},
+   process
+};
 
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
 struct Args {
-   binary_name: String,
-   installs: BTreeMap<String, String>,
-   windows_exe: bool,
-   extra_rustflags: Vec<String>,
-   output_dir: PathBuf,
+   project_dir: PathBuf,
    force: bool
 }
 
 fn parse_args() -> Result<Args, String> {
    let raw: Vec<String> = std::env::args().skip(1).collect();
-   let mut binary_name: Option<String> = None;
-   let mut installs: BTreeMap<String, String> = BTreeMap::new();
-   let mut windows_exe = false;
-   let mut extra_rustflags: Vec<String> = Vec::new();
-   let mut output_dir: Option<PathBuf> = None;
+   let mut project_dir: Option<PathBuf> = None;
    let mut force = false;
 
    let mut i = 0;
    while i < raw.len() {
       match raw[i].as_str() {
-         "--binary-name" => {
+         "--project-dir" => {
             i += 1;
-            binary_name = Some(next_value(&raw, i, "--binary-name")?);
-         }
-         "--install" => {
-            i += 1;
-            let val = next_value(&raw, i, "--install")?;
-            let (target, path) =
-               val.split_once(':').ok_or_else(|| format!("--install expects TARGET:PATH, got: {val}"))?;
-            installs.insert(target.to_string(), path.to_string());
-         }
-         "--windows-exe" => {
-            windows_exe = true;
-         }
-         "--extra-rustflag" => {
-            i += 1;
-            extra_rustflags.push(next_value(&raw, i, "--extra-rustflag")?);
-         }
-         "--output-dir" => {
-            i += 1;
-            output_dir = Some(PathBuf::from(next_value(&raw, i, "--output-dir")?));
+            let val = raw.get(i).ok_or("--project-dir requires a value")?;
+            project_dir = Some(PathBuf::from(val));
          }
          "--force" => {
             force = true;
@@ -78,44 +56,113 @@ fn parse_args() -> Result<Args, String> {
       i += 1;
    }
 
-   let binary_name = binary_name.ok_or("--binary-name is required")?;
-   let output_dir = output_dir.unwrap_or_else(|| PathBuf::from("."));
+   let project_dir = project_dir.ok_or("--project-dir is required")?;
 
-   Ok(Args { binary_name, installs, windows_exe, extra_rustflags, output_dir, force })
-}
-
-fn next_value(raw: &[String], i: usize, flag: &str) -> Result<String, String> {
-   raw.get(i).cloned().ok_or_else(|| format!("{flag} requires a value"))
+   Ok(Args { project_dir, force })
 }
 
 fn print_help() {
    println!(
-      r#"scaffold_project — writes build.rs and rel.sh for a new Rust CLI project
+      r#"scaffold_project — writes build.rs and rel.sh for a Rust CLI project
 
 USAGE:
-  cargo run --example scaffold_project -- [OPTIONS]
+  cargo run --example scaffold_project -- --project-dir <PATH> [--force]
 
 OPTIONS:
-  --binary-name <NAME>          Binary name (required, e.g. "mybinary")
-  --install <TARGET:PATH>       Install mapping, repeatable
-                                  e.g. aarch64-apple-darwin:~/.local/bin
-  --windows-exe                 Emit .exe suffix handling for Windows targets
-  --extra-rustflag <FLAG>       Extra RUSTFLAG to pass to cargo, repeatable
-                                  e.g. -Zunstable-options
-  --output-dir <DIR>            Directory to write files into (default: .)
-  --force                       Overwrite existing files
-  --help, -h                    Show this help
+  --project-dir <PATH>   Path to the target project (must contain Cargo.toml)
+  --force                Overwrite existing files
+  --help, -h             Show this help
 
 EXAMPLE:
-  cargo run --example scaffold_project -- \
-    --binary-name vr \
-    --install aarch64-apple-darwin:~/.vr/bin \
-    --install x86_64-unknown-linux-gnu:/var/home/jason/.vr/bin \
-    --install x86_64-pc-windows-msvc:/c/Users/jason/.vr/bin \
-    --windows-exe \
-    --extra-rustflag -Zunstable-options \
-    --extra-rustflag -Cpanic=immediate-abort"#
+  cargo run --example scaffold_project -- --project-dir ../vr
+  cargo run --example scaffold_project -- --project-dir ../filebydaterust --force"#
    );
+}
+
+// ---------------------------------------------------------------------------
+// Cargo.toml parsing
+// ---------------------------------------------------------------------------
+
+struct ProjectConfig {
+   binary_name: String,
+   windows_exe: bool
+}
+
+fn parse_cargo_toml(project_dir: &Path) -> Result<ProjectConfig, String> {
+   let cargo_toml_path = project_dir.join("Cargo.toml");
+   let content =
+      fs::read_to_string(&cargo_toml_path).map_err(|e| format!("Failed to read {}: {e}", cargo_toml_path.display()))?;
+
+   let binary_name = parse_binary_name(&content)?;
+   let windows_exe = has_windows_dependencies(&content);
+
+   Ok(ProjectConfig { binary_name, windows_exe })
+}
+
+/// Returns the first `[[bin]]` `name` value, or `[package]` `name` as fallback.
+fn parse_binary_name(toml: &str) -> Result<String, String> {
+   // Look for a [[bin]] section first.
+   // We scan for the pattern:    name = "..."   that follows a [[bin]] header.
+   let mut in_bin_section = false;
+   for line in toml.lines() {
+      let trimmed = line.trim();
+      if trimmed == "[[bin]]" {
+         in_bin_section = true;
+         continue;
+      }
+      // Any new section header ends the [[bin]] block
+      if trimmed.starts_with('[') {
+         in_bin_section = false;
+      }
+      if in_bin_section {
+         if let Some(name) = extract_string_value(trimmed, "name") {
+            return Ok(name);
+         }
+      }
+   }
+
+   // Fall back to [package] name
+   let mut in_package_section = false;
+   for line in toml.lines() {
+      let trimmed = line.trim();
+      if trimmed == "[package]" {
+         in_package_section = true;
+         continue;
+      }
+      if trimmed.starts_with('[') {
+         in_package_section = false;
+      }
+      if in_package_section {
+         if let Some(name) = extract_string_value(trimmed, "name") {
+            return Ok(name);
+         }
+      }
+   }
+
+   Err("Could not determine binary name from Cargo.toml (no [[bin]] name or [package] name found)".to_string())
+}
+
+/// Returns true if the Cargo.toml contains a `[target.'cfg(windows)'.dependencies]` section.
+fn has_windows_dependencies(toml: &str) -> bool {
+   toml.lines().any(|line| {
+      let t = line.trim();
+      t.starts_with("[target.") && t.contains("cfg(windows)") && t.contains("dependencies")
+   })
+}
+
+/// Extracts the string value from a line like `key = "value"`.
+fn extract_string_value(line: &str, key: &str) -> Option<String> {
+   let prefix = format!("{key} =");
+   let line = line.trim();
+   if !line.starts_with(&prefix) {
+      return None;
+   }
+   let rest = line[prefix.len()..].trim();
+   if rest.starts_with('"') && rest.ends_with('"') && rest.len() >= 2 {
+      Some(rest[1..rest.len() - 1].to_string())
+   } else {
+      None
+   }
 }
 
 // ---------------------------------------------------------------------------
@@ -124,13 +171,13 @@ EXAMPLE:
 
 fn generate_build_rs() -> String {
    r#"fn main() {
-   jt_consoleutils::build_support::emit_build_info();
+    jt_consoleutils::build_support::emit_build_info();
 }
 "#
    .to_string()
 }
 
-fn generate_rel_sh(args: &Args) -> String {
+fn generate_rel_sh(config: &ProjectConfig) -> String {
    let mut s = String::new();
 
    writeln!(s, "#!/bin/bash").unwrap();
@@ -139,43 +186,24 @@ fn generate_rel_sh(args: &Args) -> String {
    writeln!(s, r#"TARGET="${{1:-$(rustc -vV | grep '^host:' | cut -d' ' -f2)}}""#).unwrap();
    writeln!(s).unwrap();
 
-   if args.windows_exe {
+   if config.windows_exe {
       writeln!(s, "# Windows targets produce .exe binaries").unwrap();
       writeln!(s, r#"case "${{TARGET}}" in"#).unwrap();
-      writeln!(s, r#"  *-windows-*) BINARY="target/${{TARGET}}/release/{}.exe" ;;"#, args.binary_name).unwrap();
-      writeln!(s, r#"  *)           BINARY="target/${{TARGET}}/release/{}" ;;"#, args.binary_name).unwrap();
+      writeln!(s, r#"  *-windows-*) BINARY="target/${{TARGET}}/release/{}.exe" ;;"#, config.binary_name).unwrap();
+      writeln!(s, r#"  *)           BINARY="target/${{TARGET}}/release/{}" ;;"#, config.binary_name).unwrap();
       writeln!(s, "esac").unwrap();
    } else {
-      writeln!(s, r#"BINARY="target/${{TARGET}}/release/{}""#, args.binary_name).unwrap();
+      writeln!(s, r#"BINARY="target/${{TARGET}}/release/{}""#, config.binary_name).unwrap();
    }
 
    writeln!(s).unwrap();
    writeln!(s, r#"echo "Building for target: ${{TARGET}}""#).unwrap();
    writeln!(s).unwrap();
 
-   // Base rustflags — always present
-   let mut rustflags = vec!["-Zlocation-detail=none".to_string(), "-Zfmt-debug=none".to_string()];
-   rustflags.extend(args.extra_rustflags.iter().cloned());
-   let rustflags_str = rustflags.join(" ");
-
-   writeln!(s, r#"RUSTFLAGS="{rustflags_str}" cargo +nightly build \"#).unwrap();
+   writeln!(s, r#"RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none -Zunstable-options -Cpanic=immediate-abort" cargo +nightly build \"#).unwrap();
    writeln!(s, r#"  -Z build-std=std,panic_abort \"#).unwrap();
    writeln!(s, r#"  -Z build-std-features="optimize_for_size" \"#).unwrap();
    writeln!(s, r#"  --target "${{TARGET}}" --release"#).unwrap();
-
-   if !args.installs.is_empty() {
-      writeln!(s).unwrap();
-      writeln!(s, "# Install to platform-specific location").unwrap();
-      writeln!(s, r#"case "${{TARGET}}" in"#).unwrap();
-      for (target, path) in &args.installs {
-         writeln!(s, r#"  {target})"#).unwrap();
-         writeln!(s, r#"    cp "${{BINARY}}" {path} ;;"#).unwrap();
-      }
-      writeln!(s, r#"  *)"#).unwrap();
-      writeln!(s, r#"    echo "No install path configured for ${{TARGET}}, skipping install" ;;"#).unwrap();
-      writeln!(s, "esac").unwrap();
-   }
-
    writeln!(s).unwrap();
    writeln!(s, r#"ls -al "${{BINARY}}""#).unwrap();
    writeln!(s, r#""${{BINARY}}" -h"#).unwrap();
@@ -197,16 +225,23 @@ fn main() {
       }
    };
 
-   if let Err(e) = fs::create_dir_all(&args.output_dir) {
-      eprintln!("Failed to create output directory {}: {e}", args.output_dir.display());
-      process::exit(1);
-   }
+   let config = match parse_cargo_toml(&args.project_dir) {
+      Ok(c) => c,
+      Err(e) => {
+         eprintln!("Error: {e}");
+         process::exit(1);
+      }
+   };
 
-   let build_rs_path = args.output_dir.join("build.rs");
-   let rel_sh_path = args.output_dir.join("rel.sh");
+   println!("Inferred binary name : {}", config.binary_name);
+   println!("Windows .exe support : {}", config.windows_exe);
+   println!();
+
+   let build_rs_path = args.project_dir.join("build.rs");
+   let rel_sh_path = args.project_dir.join("rel.sh");
 
    let build_rs_content = generate_build_rs();
-   let rel_sh_content = generate_rel_sh(&args);
+   let rel_sh_content = generate_rel_sh(&config);
 
    write_file(&build_rs_path, &build_rs_content, args.force);
    write_file(&rel_sh_path, &rel_sh_content, args.force);
@@ -238,7 +273,7 @@ fn main() {
 
 fn write_file(path: &PathBuf, content: &str, force: bool) {
    if path.exists() && !force {
-      eprintln!("Skipping {} (already exists, use --force to overwrite)", path.display());
+      println!("Skipping {} (already exists, use --force to overwrite)", path.display());
       return;
    }
    match fs::write(path, content) {
