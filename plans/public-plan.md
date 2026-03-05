@@ -1,0 +1,197 @@
+# Plan: Publish jt-consoleutils as a Public crates.io Crate
+
+This plan tracks all work needed to take `jt-consoleutils` from its current
+private/local state to a properly published, open-source crate on crates.io.
+
+---
+
+## Step 1 — Confirm crate name availability
+
+- [ ] Search [crates.io](https://crates.io/search?q=jt-consoleutils) to confirm
+      `jt-consoleutils` is not already taken.
+- The `jt-` prefix is a personal namespace convention; there is no formal
+  namespace reservation on crates.io, so first-come-first-served applies.
+
+---
+
+## Step 2 — Flesh out `Cargo.toml`
+
+The current `Cargo.toml` is missing all the metadata fields crates.io requires
+or strongly expects. Add the following to `[package]`:
+
+| Field | Notes |
+|---|---|
+| `description` | One-line summary — required by crates.io |
+| `license` | e.g. `"MIT"` or `"MIT OR Apache-2.0"` — required |
+| `repository` | URL of the GitHub/GitLab repo |
+| `homepage` | Optional; can be the same as `repository` |
+| `documentation` | Optional; defaults to docs.rs automatically |
+| `keywords` | Up to 5 searchable tags |
+| `categories` | From the [crates.io category slugs](https://crates.io/category_slugs) list |
+| `readme` | `"README.md"` (see Step 3) |
+| `authors` | Optional but good to include |
+
+Suggested keywords: `["cli", "terminal", "ansi", "console", "shell"]`
+
+Suggested categories: `["command-line-interface", "command-line-utilities"]`
+
+---
+
+## Step 3 — Write `README.md`
+
+There is currently no README. crates.io and docs.rs both display it as the
+crate's front page. The README should cover:
+
+- [ ] Elevator-pitch description of what the crate provides
+- [ ] Quick-start example showing `Output` / `ConsoleOutput` / `OutputMode`
+- [ ] Example showing `Shell` / `ProcessShell` / `create()`
+- [ ] Feature flags section documenting `build-support`
+- [ ] MSRV declaration (minimum supported Rust version) if desired
+- [ ] License badge and link
+
+---
+
+## Step 4 — Choose and add a license
+
+There is currently no `LICENSE` file. Pick one and add it:
+
+- **MIT OR Apache-2.0** — the Rust ecosystem standard dual-license (recommended)
+- **MIT** — permissive, simple
+- **Apache-2.0** — permissive with patent protection clause
+
+- [ ] Create `LICENSE-MIT` and/or `LICENSE-APACHE` (or a single `LICENSE` file)
+- [ ] Set the matching `license` field in `Cargo.toml`
+
+---
+
+## Step 5 — Audit and complete doc comments
+
+All `pub` items must have `///` doc comments — they appear on docs.rs and are
+part of the public API contract already stated in `CLAUDE.md`.
+
+Run the missing-docs lint to find gaps:
+
+```
+RUSTDOCFLAGS="-D missing_docs" cargo doc
+```
+
+Items most likely to need attention:
+
+- [ ] Trait methods on `Output` (most have no `///` today)
+- [ ] Trait methods on `Shell`
+- [ ] Fields on `OutputMode`, `ShellConfig`, `CommandResult`
+- [ ] `ShellError` variants
+- [ ] Top-level `lib.rs` module-level doc comment (`//!`)
+- [ ] Each module's top-level `//!` doc comment
+
+Also add a `#![warn(missing_docs)]` attribute to `lib.rs` so the lint is
+enforced going forward.
+
+---
+
+## Step 6 — Resolve the ignored doctest in `version.rs`
+
+The test run shows:
+
+```
+test src/version.rs - version::version_string (line 8) ... ignored
+```
+
+The example uses `rust,ignore` because it requires build-time env vars. This
+is acceptable, but:
+
+- [ ] Add a comment in the doc block explaining *why* the example is `ignore`d
+      (e.g. `// requires BUILD_DATE and GIT_HASH env vars set by build.rs`)
+      so it doesn't look like an oversight to contributors.
+
+---
+
+## Step 7 — Establish a public Git repository
+
+crates.io expects a `repository` URL in `Cargo.toml`. Decide on the hosting
+approach:
+
+**Option A — Dedicated repo (recommended for a standalone public crate)**
+- [ ] Create `github.com/<yourname>/jt-consoleutils`
+- [ ] Push the crate's directory as the repo root
+- [ ] Set `repository = "https://github.com/<yourname>/jt-consoleutils"`
+
+**Option B — Publish from the existing monorepo**
+- [ ] Ensure the monorepo is public (or make it public)
+- [ ] Set `repository` to the monorepo URL with a subdirectory note in the
+      README, e.g. `https://github.com/<yourname>/rust/tree/main/jt-consoleutils`
+
+Either option works with `cargo publish`; Option A gives the crate a cleaner
+standalone presence.
+
+---
+
+## Step 8 — Verify `cargo publish --dry-run` passes
+
+```
+cargo publish --dry-run
+```
+
+This checks that everything packages correctly: all referenced files exist,
+the crate compiles in its packaged form, no banned file patterns are included,
+etc.
+
+Common issues to watch for:
+
+- [ ] `readme = "README.md"` in `Cargo.toml` must point to a file that exists
+- [ ] `license-file` (if used) must point to a file that exists
+- [ ] `.gitignore` already excludes `target/` — confirmed OK
+- [ ] `Cargo.lock` is intentionally included (this is a library; it can be
+      omitted or kept — crates.io ignores it on publish either way)
+
+---
+
+## Step 9 — Create a crates.io account and API token
+
+- [ ] Sign in at [crates.io](https://crates.io) with a GitHub account
+- [ ] Go to **Account Settings → API Tokens** and create a publish token
+- [ ] Run `cargo login <token>` once on the local machine
+
+---
+
+## Step 10 — Publish
+
+```
+cargo publish
+```
+
+The crate will be live within minutes. docs.rs will automatically build and
+host the documentation.
+
+---
+
+## Step 11 — Post-publish housekeeping
+
+- [ ] Tag the release in git: `git tag v0.1.0 && git push --tags`
+- [ ] Update `vr` and `filebydaterust` to reference the published version from
+      crates.io rather than a local path dependency — or keep path dependencies
+      during active co-development and switch when the API stabilises
+- [ ] Create `CHANGELOG.md` to track changes across future versions
+- [ ] Consider adding a GitHub Actions CI workflow (or equivalent) to run
+      `cargo test` on push so regressions are caught before the next publish
+
+---
+
+## Summary checklist
+
+| # | Task | Status |
+|---|---|---|
+| 1 | Confirm `jt-consoleutils` name is available on crates.io | ❌ |
+| 2 | Add `description`, `license`, `repository`, `readme`, `keywords`, `categories` to `Cargo.toml` | ❌ |
+| 3 | Write `README.md` | ❌ |
+| 4 | Add `LICENSE` file(s) | ❌ |
+| 5 | Audit doc comments; add `#![warn(missing_docs)]` to `lib.rs` | ❌ |
+| 6 | Annotate the ignored doctest in `version.rs` | ❌ |
+| 7 | Create public Git repository and set `repository` URL | ❌ |
+| 8 | `cargo publish --dry-run` passes cleanly | ❌ |
+| 9 | crates.io account created and `cargo login` done | ❌ |
+| 10 | `cargo publish` | ❌ |
+| 11 | Tag release, update consumers, add CHANGELOG, set up CI | ❌ |
+
+The code itself is in excellent shape — 115 passing tests, clean architecture,
+no compiler warnings. All remaining work is packaging and metadata, not code.
