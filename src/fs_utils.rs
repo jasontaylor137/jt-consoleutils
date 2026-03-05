@@ -1,7 +1,9 @@
 use std::path::Path;
 
 /// Check whether two paths refer to the same file on disk.
-/// Returns false if either path doesn't exist or can't be canonicalized.
+///
+/// Returns `false` if either path doesn't exist or can't be canonicalized.
+#[must_use]
 pub fn same_file(a: &Path, b: &Path) -> bool {
    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
       (Ok(ca), Ok(cb)) => ca == cb,
@@ -10,8 +12,10 @@ pub fn same_file(a: &Path, b: &Path) -> bool {
 }
 
 /// Check whether two files have identical content.
-/// Returns false if either file doesn't exist or can't be read, or if their
+///
+/// Returns `false` if either file doesn't exist or can't be read, or if their
 /// sizes differ (avoids reading content when lengths don't match).
+#[must_use]
 pub fn same_content(a: &Path, b: &Path) -> bool {
    let (Ok(meta_a), Ok(meta_b)) = (std::fs::metadata(a), std::fs::metadata(b)) else {
       return false;
@@ -26,6 +30,11 @@ pub fn same_content(a: &Path, b: &Path) -> bool {
 }
 
 /// Sets executable permission bits (+x) on Unix; no-op on Windows.
+///
+/// # Errors
+///
+/// Returns an [`std::io::Error`] if the file metadata cannot be read or the
+/// permissions cannot be applied.
 pub fn make_executable(path: &Path) -> std::io::Result<()> {
    #[cfg(unix)]
    {
@@ -41,9 +50,15 @@ pub fn make_executable(path: &Path) -> std::io::Result<()> {
    Ok(())
 }
 
-/// Remove a path that is a symlink, handling the platform difference between
-/// symlinks to directories (Windows: `remove_dir`) and symlinks to files
-/// (Unix: `remove_file`). Returns `Ok(false)` if `path` is not a symlink.
+/// Remove a path that is a symlink.
+///
+/// Handles the platform difference between symlinks to directories
+/// (Windows: `remove_dir`) and symlinks to files (Unix: `remove_file`).
+/// Returns `Ok(false)` if `path` is not a symlink.
+///
+/// # Errors
+///
+/// Returns an [`std::io::Error`] if the symlink exists but cannot be removed.
 pub fn remove_symlink_dir_like(path: &Path) -> Result<bool, std::io::Error> {
    if !path.is_symlink() {
       return Ok(false);

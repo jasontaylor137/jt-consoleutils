@@ -2,6 +2,8 @@ use std::path::Path;
 
 /// Format a byte count as a human-readable string with one decimal place.
 /// Examples: `"0 B"`, `"512 B"`, `"1.0 KB"`, `"3.5 MB"`, `"1.2 GB"`.
+#[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn format_bytes(bytes: u64) -> String {
    const KB: u64 = 1024;
    const MB: u64 = 1024 * KB;
@@ -19,12 +21,14 @@ pub fn format_bytes(bytes: u64) -> String {
 }
 
 /// Convert a `Path` to a `String` via `display()`.
+#[must_use]
 pub fn path_to_string(path: &Path) -> String {
    path.display().to_string()
 }
 
 /// Returns `""` when `n == 1`, otherwise `"s"`.
-pub fn plural(n: usize) -> &'static str {
+#[must_use]
+pub const fn plural(n: usize) -> &'static str {
    if n == 1 { "" } else { "s" }
 }
 

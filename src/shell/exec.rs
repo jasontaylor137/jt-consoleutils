@@ -22,7 +22,7 @@ pub(super) enum Line {
 impl Line {
    fn text(&self) -> &str {
       match self {
-         Line::Stdout(s) | Line::StdoutCr(s) | Line::Stderr(s) => s
+         Self::Stdout(s) | Self::StdoutCr(s) | Self::Stderr(s) => s
       }
    }
 }
@@ -43,6 +43,11 @@ struct SpawnedCommand {
 /// - **quiet**: collect output silently
 /// - **verbose**: stream with `| label...` and `> ` prefixed lines
 /// - **default**: animated spinner overlay with scrolling viewport
+///
+/// # Errors
+///
+/// Returns a [`ShellError`] if the process cannot be spawned, waited on, or
+/// exits with a non-zero status.
 pub fn run_command(
    label: &str,
    program: &str,
@@ -65,6 +70,10 @@ pub fn run_command(
 /// Use this for read-only inspection commands (e.g. `outdated`) where the
 /// output should be displayed directly to the user without any spinner or
 /// prefix decoration.
+///
+/// # Errors
+///
+/// Returns a [`ShellError`] if the process cannot be spawned or waited on.
 pub fn run_passthrough(
    program: &str,
    args: &[&str],
@@ -124,7 +133,7 @@ fn run_overlay(
    viewport_size: usize
 ) -> Result<CommandResult, ShellError> {
    let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
-   let rendered = render_overlay_lines(label, lines, viewport_size);
+   let rendered = render_overlay_lines(label, &lines, viewport_size);
    let status = wait_and_join(program, child, readers)?;
    output.step_result(label, status.success(), rendered.elapsed.as_millis(), &rendered.viewport);
    Ok(CommandResult { success: status.success(), stderr: rendered.stderr_lines.join("\n") })
@@ -133,7 +142,7 @@ fn run_overlay(
 /// Drive the animated spinner overlay from a pre-built line receiver.
 /// Returns viewport, collected stderr lines, and elapsed time.
 /// Callers are responsible for calling `output.step_result` afterward.
-pub(super) fn render_overlay_lines(label: &str, lines: mpsc::Receiver<Line>, viewport_size: usize) -> RenderedOverlay {
+pub(super) fn render_overlay_lines(label: &str, lines: &mpsc::Receiver<Line>, viewport_size: usize) -> RenderedOverlay {
    let mut stderr_lines: Vec<String> = Vec::new();
    let mut viewport: Vec<String> = Vec::new();
    let start = Instant::now();
@@ -211,6 +220,7 @@ fn spawn_line_readers(stdout: ChildStdout, stderr: ChildStderr, tx: mpsc::Sender
    let stdout_reader = thread::spawn(move || {
       use std::io::Read;
       let mut buf = String::new();
+      #[allow(clippy::collection_is_never_read)]
       let mut raw = String::new();
       let mut reader = io::BufReader::new(stdout);
       let mut byte = [0u8; 1];

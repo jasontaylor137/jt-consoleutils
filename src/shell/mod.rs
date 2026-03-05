@@ -93,6 +93,10 @@ pub trait Shell {
    /// - **quiet**: output is collected silently.
    /// - **verbose**: each line is echoed with a `> ` prefix.
    /// - **default**: an animated spinner overlay is shown.
+   /// # Errors
+   ///
+   /// Returns a [`ShellError`] if the process cannot be spawned, waited on, or
+   /// exits with a non-zero status.
    fn run_command(
       &self,
       label: &str,
@@ -103,26 +107,40 @@ pub trait Shell {
    ) -> Result<CommandResult, ShellError>;
 
    /// Run an arbitrary shell script string (passed to `bash -c` / `powershell -Command`).
+   /// # Errors
+   ///
+   /// Returns a [`ShellError`] if the shell process cannot be spawned or fails.
    fn shell_exec(&self, script: &str, output: &mut dyn Output, mode: OutputMode) -> Result<CommandResult, ShellError>;
 
    /// Return `true` when `program` can be found on `PATH`.
    fn command_exists(&self, program: &str) -> bool;
 
    /// Run `program args` and return its captured stdout as a trimmed `String`.
+   /// # Errors
+   ///
+   /// Returns a [`ShellError`] if the process cannot be spawned or exits with a non-zero status.
    fn command_output(&self, program: &str, args: &[&str]) -> Result<String, ShellError>;
 
    /// Run a shell command, capturing stdout/stderr silently without display.
    /// In dry-run mode (`DryRunShell`), logs the command and returns success without executing.
+   /// # Errors
+   ///
+   /// Returns a [`ShellError`] if the process cannot be spawned or waited on.
    fn exec_capture(&self, cmd: &str, output: &mut dyn Output, mode: OutputMode) -> Result<CommandResult, ShellError>;
 
    /// Run a shell command with inherited stdio (for interactive flows like `aws sso login`).
    /// In dry-run mode (`DryRunShell`), logs the command and returns success without executing.
+   /// # Errors
+   ///
+   /// Returns a [`ShellError`] if the process cannot be spawned or waited on.
    fn exec_interactive(&self, cmd: &str, output: &mut dyn Output, mode: OutputMode) -> Result<(), ShellError>;
 }
 
 /// Returns a `DryRunShell` when `dry_run` is true, otherwise a `ProcessShell`.
+///
 /// Both shells are configured with `ShellConfig::default()`.
 /// Use `ProcessShell` or `DryRunShell` directly if you need custom config.
+#[must_use]
 pub fn create(dry_run: bool) -> Box<dyn Shell> {
    let config = ShellConfig::default();
    if dry_run { Box::new(DryRunShell { config }) } else { Box::new(ProcessShell { config }) }
@@ -200,7 +218,7 @@ impl Shell for ProcessShell {
 // ---------------------------------------------------------------------------
 
 /// Dry-run shell: logs what would be executed and returns fake success.
-/// Probe methods (command_exists, command_output) delegate to real implementations
+/// Probe methods (`command_exists`, `command_output`) delegate to real implementations
 /// because they are read-only and safe to call.
 #[derive(Default)]
 pub struct DryRunShell {
@@ -277,7 +295,8 @@ impl Default for MockShell {
 
 impl MockShell {
    /// Create a new `MockShell` with all success flags set to `true` and empty recorded calls.
-   pub fn new() -> Self {
+   #[must_use]
+   pub const fn new() -> Self {
       Self {
          calls: std::cell::RefCell::new(Vec::new()),
          run_success: true,
@@ -698,17 +717,24 @@ fn format_command(program: &str, args: &[&str]) -> String {
 }
 
 /// Check if a program is on PATH.
-/// Uses `which` on unix, `where.exe` on windows.
+///
+/// Uses `which` on Unix, `where.exe` on Windows.
+#[must_use]
 pub fn command_exists(program: &str) -> bool {
    #[cfg(unix)]
    let check = Command::new("which").arg(program).output();
    #[cfg(windows)]
    let check = Command::new("where.exe").arg(program).output();
 
-   check.map(|o| o.status.success()).unwrap_or(false)
+   check.is_ok_and(|o| o.status.success())
 }
 
 /// Run a command and return its stdout (trimmed).
+///
+/// # Errors
+///
+/// Returns [`ShellError::Spawn`] if the process cannot be started, or
+/// [`ShellError::Failed`] if the command exits with a non-zero status.
 pub fn command_output(program: &str, args: &[&str]) -> Result<String, ShellError> {
    let output = Command::new(program)
       .args(args)
@@ -721,7 +747,7 @@ pub fn command_output(program: &str, args: &[&str]) -> Result<String, ShellError
       let stderr = String::from_utf8_lossy(&output.stderr);
       return Err(ShellError::Failed(format!(
          "'{program}' exited with {}: {}",
-         output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".to_string()),
+         output.status.code().map_or_else(|| "signal".to_string(), |c| c.to_string()),
          stderr.trim(),
       )));
    }
@@ -730,7 +756,13 @@ pub fn command_output(program: &str, args: &[&str]) -> Result<String, ShellError
 }
 
 /// Execute a script via the system shell.
+///
 /// Unix: `bash -c "script"`, Windows: `powershell -Command "script"`.
+///
+/// # Errors
+///
+/// Returns a [`ShellError`] if the process cannot be spawned or the command
+/// exits with a non-zero status.
 pub fn shell_exec(
    script: &str,
    output: &mut dyn Output,

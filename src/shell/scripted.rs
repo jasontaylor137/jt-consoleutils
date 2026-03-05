@@ -50,71 +50,84 @@ impl Default for Script {
 
 impl Script {
    /// Create a new empty `Script` that exits with success by default.
-   pub fn new() -> Self {
+   #[must_use]
+   pub const fn new() -> Self {
       Self { events: Vec::new(), success: true }
    }
 
    /// Write raw text to stdout (no implicit newline).
+   #[must_use]
    pub fn out(mut self, text: &str) -> Self {
       self.events.push(ScriptEvent::Out(text.to_string()));
       self
    }
 
    /// Write raw text to stdout then sleep for `ms` milliseconds.
+   #[must_use]
    pub fn out_ms(self, text: &str, ms: u64) -> Self {
       self.out(text).delay_ms(ms)
    }
 
    /// Write text followed by a newline to stdout.
+   #[must_use]
    pub fn out_line(self, text: &str) -> Self {
       self.out(text).out("\n")
    }
 
    /// Write text followed by a cr to stdout.
+   #[must_use]
    pub fn out_cr(mut self, text: &str) -> Self {
       self.events.push(ScriptEvent::Out(format!("{text}\r")));
       self
    }
 
    /// Write text followed by a newline to stdout then sleep for `ms` milliseconds.
+   #[must_use]
    pub fn out_line_ms(self, text: &str, ms: u64) -> Self {
       self.out_line(text).delay_ms(ms)
    }
 
    /// Write text followed by a cr to stdout then sleep for `ms` milliseconds.
+   #[must_use]
    pub fn out_cr_ms(self, text: &str, ms: u64) -> Self {
       self.out_cr(text).delay_ms(ms)
    }
 
    /// Write raw text to stderr (no implicit newline).
+   #[must_use]
    pub fn err(mut self, text: &str) -> Self {
       self.events.push(ScriptEvent::Err(text.to_string()));
       self
    }
 
    /// Write raw text to stderr then sleep for `ms` milliseconds.
+   #[must_use]
    pub fn err_ms(self, text: &str, ms: u64) -> Self {
       self.err(text).delay_ms(ms)
    }
 
    /// Write text followed by a newline to stderr.
+   #[must_use]
    pub fn err_line(self, text: &str) -> Self {
       self.err(text).err("\n")
    }
 
    /// Write text followed by a newline to stderr then sleep for `ms` milliseconds.
+   #[must_use]
    pub fn err_line_ms(self, text: &str, ms: u64) -> Self {
       self.err_line(text).delay_ms(ms)
    }
 
    /// Sleep for `ms` milliseconds before processing the next event.
+   #[must_use]
    pub fn delay_ms(mut self, ms: u64) -> Self {
       self.events.push(ScriptEvent::Delay(ms));
       self
    }
 
    /// Mark this script as exiting with a failure code. Default is success.
-   pub fn exit_failure(mut self) -> Self {
+   #[must_use]
+   pub const fn exit_failure(mut self) -> Self {
       self.success = false;
       self
    }
@@ -147,17 +160,20 @@ impl Default for ScriptedShell {
 
 impl ScriptedShell {
    /// Create a new `ScriptedShell` with an empty script queue and default config.
+   #[must_use]
    pub fn new() -> Self {
       Self { scripts: RefCell::new(VecDeque::new()), config: ShellConfig::default() }
    }
 
    /// Override the shell configuration (e.g. `viewport_size`).
-   pub fn with_config(mut self, config: ShellConfig) -> Self {
+   #[must_use]
+   pub const fn with_config(mut self, config: ShellConfig) -> Self {
       self.config = config;
       self
    }
 
    /// Enqueue a script to be consumed by the next `run_command` call.
+   #[must_use]
    pub fn push(self, script: Script) -> Self {
       self.scripts.borrow_mut().push_back(script);
       self
@@ -201,7 +217,7 @@ impl Shell for ScriptedShell {
          // tx dropped here → receiver disconnects → overlay loop exits
       });
 
-      let rendered = render_overlay_lines(label, rx, self.config.viewport_size);
+      let rendered = render_overlay_lines(label, &rx, self.config.viewport_size);
       output.step_result(label, success, rendered.elapsed.as_millis(), &rendered.viewport);
 
       Ok(CommandResult { success, stderr: rendered.stderr_lines.join("\n") })
