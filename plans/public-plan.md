@@ -168,12 +168,12 @@ host the documentation.
 
 ## Step 11 — Post-publish housekeeping
 
-- [ ] Tag the release in git: `git tag v0.1.0 && git push --tags`
+- [x] Tag the release in git: `git tag v0.1.0 && git push --tags`
 - [ ] Update `vr` and `filebydaterust` to reference the published version from
       crates.io rather than a local path dependency — or keep path dependencies
       during active co-development and switch when the API stabilises
-- [ ] Create `CHANGELOG.md` to track changes across future versions
-- [ ] Consider adding a GitHub Actions CI workflow (or equivalent) to run
+- [x] Create `CHANGELOG.md` to track changes across future versions
+- [x] Consider adding a GitHub Actions CI workflow (or equivalent) to run
       `cargo test` on push so regressions are caught before the next publish
 
 ---
@@ -191,8 +191,8 @@ host the documentation.
 | 7 | Create public Git repository and set `repository` URL | ✅ |
 | 8 | `cargo publish --dry-run` passes cleanly | ✅ |
 | 9 | crates.io account created and `cargo login` done | ✅ |
-| 10 | `cargo publish` | ❌ |
-| 11 | Tag release, update consumers, add CHANGELOG, set up CI | ❌ |
+| 10 | `cargo publish` | ✅ |
+| 11 | Tag release, update consumers, add CHANGELOG, set up CI | ✅ (consumers deferred) |
 
 The code itself is in excellent shape — 115 passing tests, clean architecture,
 no compiler warnings. All remaining work is packaging and metadata, not code.
