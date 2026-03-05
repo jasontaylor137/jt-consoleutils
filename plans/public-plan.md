@@ -139,19 +139,19 @@ etc.
 
 Common issues to watch for:
 
-- [ ] `readme = "README.md"` in `Cargo.toml` must point to a file that exists
-- [ ] `license-file` (if used) must point to a file that exists
-- [ ] `.gitignore` already excludes `target/` — confirmed OK
-- [ ] `Cargo.lock` is intentionally included (this is a library; it can be
+- [x] `readme = "README.md"` in `Cargo.toml` must point to a file that exists
+- [x] `license-file` (if used) must point to a file that exists
+- [x] `.gitignore` already excludes `target/` — confirmed OK
+- [x] `Cargo.lock` is intentionally included (this is a library; it can be
       omitted or kept — crates.io ignores it on publish either way)
 
 ---
 
 ## Step 9 — Create a crates.io account and API token
 
-- [ ] Sign in at [crates.io](https://crates.io) with a GitHub account
-- [ ] Go to **Account Settings → API Tokens** and create a publish token
-- [ ] Run `cargo login <token>` once on the local machine
+- [x] Sign in at [crates.io](https://crates.io) with a GitHub account
+- [x] Go to **Account Settings → API Tokens** and create a publish token
+- [x] Run `cargo login <token>` once on the local machine
 
 ---
 
@@ -189,8 +189,8 @@ host the documentation.
 | 5 | Audit doc comments; add `#![warn(missing_docs)]` to `lib.rs` | ✅ |
 | 6 | Annotate the ignored doctest in `version.rs` | ✅ |
 | 7 | Create public Git repository and set `repository` URL | ✅ |
-| 8 | `cargo publish --dry-run` passes cleanly | ❌ |
-| 9 | crates.io account created and `cargo login` done | ❌ |
+| 8 | `cargo publish --dry-run` passes cleanly | ✅ |
+| 9 | crates.io account created and `cargo login` done | ✅ |
 | 10 | `cargo publish` | ❌ |
 | 11 | Tag release, update consumers, add CHANGELOG, set up CI | ❌ |
 
