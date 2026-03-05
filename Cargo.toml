@@ -3,6 +3,9 @@ name = "jt-consoleutils"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+build-support = []
+
 [dependencies]
 terminal_size = "0.4"
 thiserror = "2"
