@@ -1,3 +1,21 @@
+//! The [`Shell`](crate::shell::Shell) trait and its standard implementations.
+//!
+//! # Overview
+//!
+//! - [`Shell`](crate::shell::Shell) — the core trait; implement it to control how processes are
+//!   spawned.
+//! - [`ProcessShell`](crate::shell::ProcessShell) — the production implementation; spawns real OS
+//!   processes.
+//! - [`DryRunShell`](crate::shell::DryRunShell) — logs what would be executed and returns fake
+//!   success; safe to use in dry-run workflows.
+//! - [`MockShell`](crate::shell::MockShell) — records calls and returns configurable results;
+//!   intended for unit tests.
+//! - [`ScriptedShell`](crate::shell::scripted::ScriptedShell) — drives the real spinner overlay
+//!   using pre-configured output scripts; intended for overlay integration tests.
+//!
+//! Use [`create`](crate::shell::create) to get a boxed `Shell` at runtime based on a `dry_run`
+//! flag.
+
 use std::{
    io,
    process::{Command, Stdio}
@@ -36,12 +54,16 @@ impl Default for ShellConfig {
 // Error
 // ---------------------------------------------------------------------------
 
+/// Errors that can be returned by [`Shell`] methods.
 #[derive(Debug, thiserror::Error)]
 pub enum ShellError {
+   /// The OS refused to spawn the process (e.g. binary not found, permission denied).
    #[error("failed to spawn '{0}': {1}")]
    Spawn(String, io::Error),
+   /// The process was spawned but waiting on it failed.
    #[error("failed to wait on '{0}': {1}")]
    Wait(String, io::Error),
+   /// The process exited with a non-zero status code.
    #[error("command failed: {0}")]
    Failed(String)
 }
@@ -50,9 +72,12 @@ pub enum ShellError {
 // CommandResult
 // ---------------------------------------------------------------------------
 
+/// The outcome of a completed shell command.
 #[derive(Debug)]
 pub struct CommandResult {
+   /// `true` when the process exited with status 0.
    pub success: bool,
+   /// All stderr output collected from the process, joined with newlines.
    pub stderr: String
 }
 
@@ -62,6 +87,12 @@ pub struct CommandResult {
 
 /// Abstraction over shell execution, enabling unit tests to mock process spawning.
 pub trait Shell {
+   /// Run `program` with `args`, displaying progress under `label`.
+   ///
+   /// Output behavior is controlled by `mode`:
+   /// - **quiet**: output is collected silently.
+   /// - **verbose**: each line is echoed with a `> ` prefix.
+   /// - **default**: an animated spinner overlay is shown.
    fn run_command(
       &self,
       label: &str,
@@ -71,10 +102,13 @@ pub trait Shell {
       mode: OutputMode
    ) -> Result<CommandResult, ShellError>;
 
+   /// Run an arbitrary shell script string (passed to `bash -c` / `powershell -Command`).
    fn shell_exec(&self, script: &str, output: &mut dyn Output, mode: OutputMode) -> Result<CommandResult, ShellError>;
 
+   /// Return `true` when `program` can be found on `PATH`.
    fn command_exists(&self, program: &str) -> bool;
 
+   /// Run `program args` and return its captured stdout as a trimmed `String`.
    fn command_output(&self, program: &str, args: &[&str]) -> Result<String, ShellError>;
 
    /// Run a shell command, capturing stdout/stderr silently without display.
@@ -101,6 +135,7 @@ pub fn create(dry_run: bool) -> Box<dyn Shell> {
 /// Production shell: delegates to the free functions in this module.
 #[derive(Default)]
 pub struct ProcessShell {
+   /// Shell execution configuration (e.g. overlay viewport height).
    pub config: ShellConfig
 }
 
@@ -169,6 +204,7 @@ impl Shell for ProcessShell {
 /// because they are read-only and safe to call.
 #[derive(Default)]
 pub struct DryRunShell {
+   /// Shell execution configuration (e.g. overlay viewport height).
    pub config: ShellConfig
 }
 
@@ -218,9 +254,13 @@ impl Shell for DryRunShell {
 /// Intended for **testing use**. Not gated behind `#[cfg(test)]` so that downstream
 /// crates can use it in their own test suites; LTO eliminates it from production builds.
 pub struct MockShell {
+   /// Ordered log of every call made to this shell, formatted as `"program arg1 arg2"`.
    pub calls: std::cell::RefCell<Vec<String>>,
+   /// Value returned by `run_command` / `shell_exec` / `exec_capture`. Defaults to `true`.
    pub run_success: bool,
+   /// Value returned by `command_exists`. Defaults to `true`.
    pub command_exists_result: bool,
+   /// Stdout value returned by `command_output` when `command_output_ok` is `true`.
    pub command_output_value: String,
    /// When false, `command_output` returns `Err` (e.g. to simulate a tool not installed).
    pub command_output_ok: bool,
@@ -236,6 +276,7 @@ impl Default for MockShell {
 }
 
 impl MockShell {
+   /// Create a new `MockShell` with all success flags set to `true` and empty recorded calls.
    pub fn new() -> Self {
       Self {
          calls: std::cell::RefCell::new(Vec::new()),
@@ -247,6 +288,7 @@ impl MockShell {
       }
    }
 
+   /// Return a snapshot of all calls recorded so far.
    pub fn calls(&self) -> Vec<String> {
       self.calls.borrow().clone()
    }

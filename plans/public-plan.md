@@ -77,15 +77,16 @@ RUSTDOCFLAGS="-D missing_docs" cargo doc
 
 Items most likely to need attention:
 
-- [ ] Trait methods on `Output` (most have no `///` today)
-- [ ] Trait methods on `Shell`
-- [ ] Fields on `OutputMode`, `ShellConfig`, `CommandResult`
-- [ ] `ShellError` variants
-- [ ] Top-level `lib.rs` module-level doc comment (`//!`)
-- [ ] Each module's top-level `//!` doc comment
+- [x] Trait methods on `Output` (most have no `///` today)
+- [x] Trait methods on `Shell`
+- [x] Fields on `OutputMode`, `ShellConfig`, `CommandResult`
+- [x] `ShellError` variants
+- [x] Top-level `lib.rs` module-level doc comment (`//!`)
+- [x] Each module's top-level `//!` doc comment
 
 Also add a `#![warn(missing_docs)]` attribute to `lib.rs` so the lint is
-enforced going forward.
+enforced going forward. ✅ Added; `RUSTDOCFLAGS="-D missing_docs" cargo doc`
+now passes with zero warnings and zero errors.
 
 ---
 
@@ -185,7 +186,7 @@ host the documentation.
 | 2 | Add `description`, `license`, `repository`, `readme`, `keywords`, `categories` to `Cargo.toml` | ✅ |
 | 3 | Write `README.md` | ✅ |
 | 4 | Add `LICENSE` file(s) | ✅ |
-| 5 | Audit doc comments; add `#![warn(missing_docs)]` to `lib.rs` | ❌ |
+| 5 | Audit doc comments; add `#![warn(missing_docs)]` to `lib.rs` | ✅ |
 | 6 | Annotate the ignored doctest in `version.rs` | ❌ |
 | 7 | Create public Git repository and set `repository` URL | ❌ |
 | 8 | `cargo publish --dry-run` passes cleanly | ❌ |

@@ -49,6 +49,7 @@ impl Default for Script {
 }
 
 impl Script {
+   /// Create a new empty `Script` that exits with success by default.
    pub fn new() -> Self {
       Self { events: Vec::new(), success: true }
    }
@@ -145,6 +146,7 @@ impl Default for ScriptedShell {
 }
 
 impl ScriptedShell {
+   /// Create a new `ScriptedShell` with an empty script queue and default config.
    pub fn new() -> Self {
       Self { scripts: RefCell::new(VecDeque::new()), config: ShellConfig::default() }
    }
