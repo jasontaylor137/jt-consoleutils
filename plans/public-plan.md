@@ -7,7 +7,7 @@ private/local state to a properly published, open-source crate on crates.io.
 
 ## Step 1 — Confirm crate name availability
 
-- [ ] Search [crates.io](https://crates.io/search?q=jt-consoleutils) to confirm
+- [x] Search [crates.io](https://crates.io/search?q=jt-consoleutils) to confirm
       `jt-consoleutils` is not already taken.
 - The `jt-` prefix is a personal namespace convention; there is no formal
   namespace reservation on crates.io, so first-come-first-served applies.
@@ -31,7 +31,7 @@ or strongly expects. Add the following to `[package]`:
 | `readme` | `"README.md"` (see Step 3) |
 | `authors` | Optional but good to include |
 
-Suggested keywords: `["cli", "terminal", "ansi", "console", "shell"]`
+Suggested keywords: `["cli", "terminal", "console", "shell"]`
 
 Suggested categories: `["command-line-interface", "command-line-utilities"]`
 
@@ -42,12 +42,12 @@ Suggested categories: `["command-line-interface", "command-line-utilities"]`
 There is currently no README. crates.io and docs.rs both display it as the
 crate's front page. The README should cover:
 
-- [ ] Elevator-pitch description of what the crate provides
-- [ ] Quick-start example showing `Output` / `ConsoleOutput` / `OutputMode`
-- [ ] Example showing `Shell` / `ProcessShell` / `create()`
-- [ ] Feature flags section documenting `build-support`
-- [ ] MSRV declaration (minimum supported Rust version) if desired
-- [ ] License badge and link
+- [x] Elevator-pitch description of what the crate provides
+- [x] Quick-start example showing `Output` / `ConsoleOutput` / `OutputMode`
+- [x] Example showing `Shell` / `ProcessShell` / `create()`
+- [x] Feature flags section documenting `build-support`
+- [x] MSRV declaration (minimum supported Rust version) if desired
+- [x] License badge and link
 
 ---
 
@@ -59,8 +59,8 @@ There is currently no `LICENSE` file. Pick one and add it:
 - **MIT** — permissive, simple
 - **Apache-2.0** — permissive with patent protection clause
 
-- [ ] Create `LICENSE-MIT` and/or `LICENSE-APACHE` (or a single `LICENSE` file)
-- [ ] Set the matching `license` field in `Cargo.toml`
+- [x] Create `LICENSE-MIT` and/or `LICENSE-APACHE` (or a single `LICENSE` file)
+- [x] Set the matching `license` field in `Cargo.toml`
 
 ---
 
@@ -181,10 +181,10 @@ host the documentation.
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Confirm `jt-consoleutils` name is available on crates.io | ❌ |
-| 2 | Add `description`, `license`, `repository`, `readme`, `keywords`, `categories` to `Cargo.toml` | ❌ |
-| 3 | Write `README.md` | ❌ |
-| 4 | Add `LICENSE` file(s) | ❌ |
+| 1 | Confirm `jt-consoleutils` name is available on crates.io | ✅ |
+| 2 | Add `description`, `license`, `repository`, `readme`, `keywords`, `categories` to `Cargo.toml` | ✅ |
+| 3 | Write `README.md` | ✅ |
+| 4 | Add `LICENSE` file(s) | ✅ |
 | 5 | Audit doc comments; add `#![warn(missing_docs)]` to `lib.rs` | ❌ |
 | 6 | Annotate the ignored doctest in `version.rs` | ❌ |
 | 7 | Create public Git repository and set `repository` URL | ❌ |

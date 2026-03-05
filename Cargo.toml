@@ -2,6 +2,14 @@
 name = "jt-consoleutils"
 version = "0.1.0"
 edition = "2024"
+description = "Scaffolding and helpers for CLI tools"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jasontaylor137/jt-consoleutils"
+homepage = "https://github.com/jasontaylor137/jt-consoleutils"
+readme = "README.md"
+authors = ["Jason Taylor <jasont137@gmail.com>"]
+keywords = ["cli", "terminal", "console", "shell"]
+categories = ["command-line-interface", "command-line-utilities"]
 
 [features]
 build-support = []
