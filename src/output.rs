@@ -1,23 +1,54 @@
+//! The [`Output`](crate::output::Output) trait and its standard implementations.
+//!
+//! # Overview
+//!
+//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries the three
+//!   common CLI flags (`verbose`, `quiet`, `dry_run`).
+//! - [`Output`](crate::output::Output) — the core trait; implement it to redirect output anywhere.
+//! - [`ConsoleOutput`](crate::output::ConsoleOutput) — the production implementation; respects
+//!   `quiet` / `verbose` and writes to stdout.
+//! - [`StringOutput`](crate::output::StringOutput) — an in-memory implementation for use in tests;
+//!   captures all output in a `String` that can be inspected with
+//!   [`StringOutput::log`](crate::output::StringOutput::log).
+
 // ---------------------------------------------------------------------------
 // OutputMode
 // ---------------------------------------------------------------------------
 
+/// Carries the three standard CLI output-mode flags.
+///
+/// Construct with struct literal syntax or [`Default::default`] (all flags
+/// `false`):
+///
+/// ```rust
+/// use jt_consoleutils::output::OutputMode;
+///
+/// let mode = OutputMode { verbose: true, ..OutputMode::default() };
+/// assert!(mode.is_verbose());
+/// assert!(!mode.is_quiet());
+/// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OutputMode {
+   /// Enable verbose output: commands and their output are echoed.
    pub verbose: bool,
+   /// Suppress all output, including normal progress messages.
    pub quiet: bool,
+   /// Dry-run mode: announce operations without executing them.
    pub dry_run: bool
 }
 
 impl OutputMode {
+   /// Returns `true` when verbose output is enabled.
    pub fn is_verbose(self) -> bool {
       self.verbose
    }
 
+   /// Returns `true` when quiet mode is active (all output suppressed).
    pub fn is_quiet(self) -> bool {
       self.quiet
    }
 
+   /// Returns `true` when dry-run mode is active.
    pub fn is_dry_run(self) -> bool {
       self.dry_run
    }
@@ -27,12 +58,35 @@ impl OutputMode {
 // Output trait
 // ---------------------------------------------------------------------------
 
+/// Abstraction over console output, enabling tests to capture output in memory.
+///
+/// The three standard implementations are:
+/// - [`ConsoleOutput`] — writes to stdout, respecting `quiet` / `verbose`.
+/// - [`StringOutput`] — captures everything in a `String` for assertions.
+/// - `MockShell`'s internal output — not part of this trait, but follows the same pattern.
+///
+/// Implement this trait to redirect output to a logger, a file, or anywhere else.
 pub trait Output {
+   /// Write `line` followed by a newline. Suppressed in quiet mode.
    fn writeln(&mut self, line: &str);
+
+   /// Write `text` without a trailing newline. Suppressed in quiet mode.
    fn write(&mut self, text: &str);
+
+   /// Emit a lazily-evaluated message, only in verbose mode.
+   ///
+   /// The closure is only called when the implementation decides to display it,
+   /// avoiding string allocation cost in non-verbose builds.
    fn verbose(&mut self, f: Box<dyn FnOnce() -> String>);
+
+   /// Echo a shell command about to be run (verbose mode only).
    fn shell_command(&mut self, cmd: &str);
+
+   /// Echo a single line of output from a running shell command.
    fn shell_line(&mut self, line: &str);
+
+   /// Render the result of a completed step: a tick/cross, label, elapsed time,
+   /// and (on failure) the last few lines of output from the `viewport`.
    fn step_result(&mut self, label: &str, success: bool, elapsed_ms: u128, viewport: &[String]);
 
    /// Dry-run: announce a shell command that would be executed.
@@ -76,11 +130,18 @@ fn with_prefix(prefix: &str, msg: &str) -> String {
 // ConsoleOutput
 // ---------------------------------------------------------------------------
 
+/// Production [`Output`] implementation that writes to stdout.
+///
+/// Behavior depends on the [`OutputMode`] supplied at construction:
+/// - `quiet`: all methods are silent.
+/// - `verbose`: commands, their arguments, and verbose messages are printed.
+/// - default: normal progress messages are printed; verbose output is hidden.
 pub struct ConsoleOutput {
    mode: OutputMode
 }
 
 impl ConsoleOutput {
+   /// Create a new `ConsoleOutput` driven by `mode`.
    pub fn new(mode: OutputMode) -> Self {
       Self { mode }
    }
@@ -158,15 +219,29 @@ impl Output for ConsoleOutput {
 // Intentionally pub so downstream crates can use it in their own tests.
 // ---------------------------------------------------------------------------
 
+/// In-memory [`Output`] implementation for use in tests.
+///
+/// All output is appended to an internal `String`. Call [`StringOutput::log`]
+/// to retrieve the full captured output and assert on it.
+///
+/// ```rust
+/// use jt_consoleutils::output::{Output, StringOutput};
+///
+/// let mut out = StringOutput::new();
+/// out.writeln("hello");
+/// assert_eq!(out.log(), "hello\n");
+/// ```
 pub struct StringOutput {
    buf: String
 }
 
 impl StringOutput {
+   /// Create a new, empty `StringOutput`.
    pub fn new() -> Self {
       Self { buf: String::new() }
    }
 
+   /// Return the full captured output as a string slice.
    pub fn log(&self) -> &str {
       &self.buf
    }
