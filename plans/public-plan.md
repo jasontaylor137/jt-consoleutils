@@ -101,7 +101,7 @@ test src/version.rs - version::version_string (line 8) ... ignored
 The example uses `rust,ignore` because it requires build-time env vars. This
 is acceptable, but:
 
-- [ ] Add a comment in the doc block explaining *why* the example is `ignore`d
+- [x] Add a comment in the doc block explaining *why* the example is `ignore`d
       (e.g. `// requires BUILD_DATE and GIT_HASH env vars set by build.rs`)
       so it doesn't look like an oversight to contributors.
 
@@ -113,13 +113,13 @@ crates.io expects a `repository` URL in `Cargo.toml`. Decide on the hosting
 approach:
 
 **Option A — Dedicated repo (recommended for a standalone public crate)**
-- [ ] Create `github.com/<yourname>/jt-consoleutils`
-- [ ] Push the crate's directory as the repo root
-- [ ] Set `repository = "https://github.com/<yourname>/jt-consoleutils"`
+- [x] Create `github.com/<yourname>/jt-consoleutils`
+- [x] Push the crate's directory as the repo root
+- [x] Set `repository = "https://github.com/<yourname>/jt-consoleutils"`
 
 **Option B — Publish from the existing monorepo**
-- [ ] Ensure the monorepo is public (or make it public)
-- [ ] Set `repository` to the monorepo URL with a subdirectory note in the
+- [x] Ensure the monorepo is public (or make it public)
+- [x] Set `repository` to the monorepo URL with a subdirectory note in the
       README, e.g. `https://github.com/<yourname>/rust/tree/main/jt-consoleutils`
 
 Either option works with `cargo publish`; Option A gives the crate a cleaner
@@ -187,8 +187,8 @@ host the documentation.
 | 3 | Write `README.md` | ✅ |
 | 4 | Add `LICENSE` file(s) | ✅ |
 | 5 | Audit doc comments; add `#![warn(missing_docs)]` to `lib.rs` | ✅ |
-| 6 | Annotate the ignored doctest in `version.rs` | ❌ |
-| 7 | Create public Git repository and set `repository` URL | ❌ |
+| 6 | Annotate the ignored doctest in `version.rs` | ✅ |
+| 7 | Create public Git repository and set `repository` URL | ✅ |
 | 8 | `cargo publish --dry-run` passes cleanly | ❌ |
 | 9 | crates.io account created and `cargo login` done | ❌ |
 | 10 | `cargo publish` | ❌ |

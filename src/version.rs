@@ -6,6 +6,10 @@
 /// # Example
 ///
 /// ```rust,ignore
+/// // This example is marked `ignore` because `BUILD_DATE` and `GIT_HASH` are
+/// // environment variables injected at compile time by `build.rs`. They are
+/// // not available in the doctest environment, so the example cannot be run
+/// // as a test. It is provided for illustration purposes only.
 /// const BUILD_DATE: &str = env!("BUILD_DATE");
 /// const GIT_HASH: &str = env!("GIT_HASH");
 ///
