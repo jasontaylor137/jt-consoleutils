@@ -1,6 +1,7 @@
 pub mod colorize;
 pub mod colors;
 pub mod fs_utils;
+pub mod help;
 pub mod output;
 pub mod shell;
 pub mod str_utils;
