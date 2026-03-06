@@ -220,7 +220,7 @@ impl Shell for ScriptedShell {
       let rendered = render_overlay_lines(label, &rx, self.config.viewport_size);
       output.step_result(label, success, rendered.elapsed.as_millis(), &rendered.viewport);
 
-      Ok(CommandResult { success, stderr: rendered.stderr_lines.join("\n") })
+      Ok(CommandResult { success, code: None, stderr: rendered.stderr_lines.join("\n") })
    }
 
    fn shell_exec(
@@ -229,7 +229,7 @@ impl Shell for ScriptedShell {
       _output: &mut dyn Output,
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
-      Ok(CommandResult { success: true, stderr: String::new() })
+      Ok(CommandResult { success: true, code: None, stderr: String::new() })
    }
 
    fn command_exists(&self, _program: &str) -> bool {
@@ -246,7 +246,7 @@ impl Shell for ScriptedShell {
       _output: &mut dyn Output,
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
-      Ok(CommandResult { success: true, stderr: String::new() })
+      Ok(CommandResult { success: true, code: None, stderr: String::new() })
    }
 
    fn exec_interactive(&self, _cmd: &str, _output: &mut dyn Output, _mode: OutputMode) -> Result<(), ShellError> {

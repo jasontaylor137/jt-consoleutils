@@ -82,7 +82,7 @@ pub fn run_passthrough(
 ) -> Result<CommandResult, ShellError> {
    if mode.is_dry_run() {
       output.dry_run_shell(&super::format_command(program, args));
-      return Ok(CommandResult { success: true, stderr: String::new() });
+      return Ok(CommandResult { success: true, code: None, stderr: String::new() });
    }
 
    let status = Command::new(program)
@@ -94,7 +94,7 @@ pub fn run_passthrough(
       .wait()
       .map_err(|e| ShellError::Wait(program.to_string(), e))?;
 
-   Ok(CommandResult { success: status.success(), stderr: String::new() })
+   Ok(CommandResult { success: status.success(), code: status.code(), stderr: String::new() })
 }
 
 /// Quiet mode: collect output silently, no terminal rendering.
@@ -103,7 +103,7 @@ pub(super) fn run_quiet(program: &str, args: &[&str]) -> Result<CommandResult, S
    let stderr_lines = collect_stderr_lines(lines, |_| {});
    let status = wait_and_join(program, child, readers)?;
 
-   Ok(CommandResult { success: status.success(), stderr: stderr_lines.join("\n") })
+   Ok(CommandResult { success: status.success(), code: status.code(), stderr: stderr_lines.join("\n") })
 }
 
 /// Verbose mode: stream output with `| label...` header and `> ` prefixed lines.
@@ -121,7 +121,7 @@ fn run_verbose(
    let stderr_lines = collect_stderr_lines(lines, |line| output.shell_line(line));
    let status = wait_and_join(program, child, readers)?;
 
-   Ok(CommandResult { success: status.success(), stderr: stderr_lines.join("\n") })
+   Ok(CommandResult { success: status.success(), code: status.code(), stderr: stderr_lines.join("\n") })
 }
 
 /// Default mode: animated spinner with scrolling viewport overlay.
@@ -136,7 +136,7 @@ fn run_overlay(
    let rendered = render_overlay_lines(label, &lines, viewport_size);
    let status = wait_and_join(program, child, readers)?;
    output.step_result(label, status.success(), rendered.elapsed.as_millis(), &rendered.viewport);
-   Ok(CommandResult { success: status.success(), stderr: rendered.stderr_lines.join("\n") })
+   Ok(CommandResult { success: status.success(), code: status.code(), stderr: rendered.stderr_lines.join("\n") })
 }
 
 /// Drive the animated spinner overlay from a pre-built line receiver.

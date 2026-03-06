@@ -77,6 +77,10 @@ pub enum ShellError {
 pub struct CommandResult {
    /// `true` when the process exited with status 0.
    pub success: bool,
+   /// The numeric exit code of the process, if available.
+   /// `None` for dry-run, mock, and scripted shells, or on platforms where
+   /// the process was terminated by a signal rather than a normal exit.
+   pub code: Option<i32>,
    /// All stderr output collected from the process, joined with newlines.
    pub stderr: String
 }
@@ -236,12 +240,12 @@ impl Shell for DryRunShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       output.dry_run_shell(&format_command(program, args));
-      Ok(CommandResult { success: true, stderr: String::new() })
+      Ok(CommandResult { success: true, code: None, stderr: String::new() })
    }
 
    fn shell_exec(&self, script: &str, output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
       output.dry_run_shell(script);
-      Ok(CommandResult { success: true, stderr: String::new() })
+      Ok(CommandResult { success: true, code: None, stderr: String::new() })
    }
 
    fn command_exists(&self, program: &str) -> bool {
@@ -254,7 +258,7 @@ impl Shell for DryRunShell {
 
    fn exec_capture(&self, cmd: &str, output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
       output.dry_run_shell(cmd);
-      Ok(CommandResult { success: true, stderr: String::new() })
+      Ok(CommandResult { success: true, code: None, stderr: String::new() })
    }
 
    fn exec_interactive(&self, cmd: &str, output: &mut dyn Output, _mode: OutputMode) -> Result<(), ShellError> {
@@ -323,7 +327,7 @@ impl Shell for MockShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format_command(program, args));
-      Ok(CommandResult { success: self.run_success, stderr: String::new() })
+      Ok(CommandResult { success: self.run_success, code: None, stderr: String::new() })
    }
 
    fn shell_exec(
@@ -333,7 +337,7 @@ impl Shell for MockShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format!("shell_exec: {script}"));
-      Ok(CommandResult { success: self.run_success, stderr: String::new() })
+      Ok(CommandResult { success: self.run_success, code: None, stderr: String::new() })
    }
 
    fn command_exists(&self, _program: &str) -> bool {
@@ -351,11 +355,11 @@ impl Shell for MockShell {
 
    fn exec_capture(&self, cmd: &str, _output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format!("exec_capture: {cmd}"));
-      let result = self
-         .exec_capture_results
-         .borrow_mut()
-         .pop_front()
-         .unwrap_or_else(|| CommandResult { success: self.run_success, stderr: String::new() });
+      let result = self.exec_capture_results.borrow_mut().pop_front().unwrap_or_else(|| CommandResult {
+         success: self.run_success,
+         code: None,
+         stderr: String::new()
+      });
       Ok(result)
    }
 
@@ -649,10 +653,11 @@ mod tests {
    #[test]
    fn mock_shell_exec_capture_pops_from_queue() {
       let shell = MockShell::new();
-      shell
-         .exec_capture_results
-         .borrow_mut()
-         .push_back(CommandResult { success: false, stderr: "queue error".to_string() });
+      shell.exec_capture_results.borrow_mut().push_back(CommandResult {
+         success: false,
+         code: None,
+         stderr: "queue error".to_string()
+      });
       let mut out = StringOutput::new();
       let result = shell.exec_capture("any cmd", &mut out, default_mode()).unwrap();
       assert!(!result.success);
@@ -671,8 +676,16 @@ mod tests {
    #[test]
    fn mock_shell_exec_capture_queue_consumed_in_order() {
       let shell = MockShell::new();
-      shell.exec_capture_results.borrow_mut().push_back(CommandResult { success: true, stderr: String::new() });
-      shell.exec_capture_results.borrow_mut().push_back(CommandResult { success: false, stderr: "second".to_string() });
+      shell.exec_capture_results.borrow_mut().push_back(CommandResult {
+         success: true,
+         code: None,
+         stderr: String::new()
+      });
+      shell.exec_capture_results.borrow_mut().push_back(CommandResult {
+         success: false,
+         code: None,
+         stderr: "second".to_string()
+      });
       let mut out = StringOutput::new();
       let r1 = shell.exec_capture("cmd", &mut out, default_mode()).unwrap();
       let r2 = shell.exec_capture("cmd", &mut out, default_mode()).unwrap();
