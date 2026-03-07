@@ -25,7 +25,7 @@
 //! ```rust
 //! use jt_consoleutils::output::{ConsoleOutput, Output, OutputMode};
 //!
-//! let mode = OutputMode { verbose: false, quiet: false, dry_run: false };
+//! let mode = OutputMode::default();
 //! let mut out = ConsoleOutput::new(mode);
 //! out.writeln("Hello, world!");
 //! ```

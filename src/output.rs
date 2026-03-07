@@ -2,8 +2,9 @@
 //!
 //! # Overview
 //!
-//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries the three
-//!   common CLI flags (`verbose`, `quiet`, `dry_run`).
+//! - [`LogLevel`](crate::output::LogLevel) — ordered enum representing the verbosity level.
+//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries a
+//!   [`LogLevel`] and the `dry_run` flag.
 //! - [`Output`](crate::output::Output) — the core trait; implement it to redirect output anywhere.
 //! - [`ConsoleOutput`](crate::output::ConsoleOutput) — the production implementation; respects
 //!   `quiet` / `verbose` and writes to stdout.
@@ -12,42 +13,68 @@
 //!   [`StringOutput::log`](crate::output::StringOutput::log).
 
 // ---------------------------------------------------------------------------
+// LogLevel
+// ---------------------------------------------------------------------------
+
+/// Ordered verbosity level for CLI output.
+///
+/// Levels are ordered from least to most verbose:
+/// `Quiet < Normal < Verbose < Trace`.
+/// This allows range comparisons: `level >= LogLevel::Verbose`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LogLevel {
+   /// Suppress all output, including normal progress messages.
+   Quiet,
+   /// Normal progress messages are printed; verbose output is hidden.
+   #[default]
+   Normal,
+   /// Commands, their arguments, and verbose messages are printed.
+   Verbose,
+   /// All verbose output plus trace-level diagnostics.
+   Trace,
+}
+
+// ---------------------------------------------------------------------------
 // OutputMode
 // ---------------------------------------------------------------------------
 
-/// Carries the three standard CLI output-mode flags.
+/// Carries the standard CLI output-mode configuration.
 ///
-/// Construct with struct literal syntax or [`Default::default`] (all flags
-/// `false`):
+/// Construct with struct literal syntax or [`Default::default`] (normal level,
+/// dry-run off):
 ///
 /// ```rust
-/// use jt_consoleutils::output::OutputMode;
+/// use jt_consoleutils::output::{LogLevel, OutputMode};
 ///
-/// let mode = OutputMode { verbose: true, ..OutputMode::default() };
+/// let mode = OutputMode { level: LogLevel::Verbose, ..OutputMode::default() };
 /// assert!(mode.is_verbose());
 /// assert!(!mode.is_quiet());
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OutputMode {
-   /// Enable verbose output: commands and their output are echoed.
-   pub verbose: bool,
-   /// Suppress all output, including normal progress messages.
-   pub quiet: bool,
+   /// The verbosity level.
+   pub level: LogLevel,
    /// Dry-run mode: announce operations without executing them.
    pub dry_run: bool
 }
 
 impl OutputMode {
-   /// Returns `true` when verbose output is enabled.
+   /// Returns `true` when verbose (or trace) output is enabled.
    #[must_use]
    pub const fn is_verbose(self) -> bool {
-      self.verbose
+      matches!(self.level, LogLevel::Verbose | LogLevel::Trace)
    }
 
    /// Returns `true` when quiet mode is active (all output suppressed).
    #[must_use]
    pub const fn is_quiet(self) -> bool {
-      self.quiet
+      matches!(self.level, LogLevel::Quiet)
+   }
+
+   /// Returns `true` when trace mode is active.
+   #[must_use]
+   pub const fn is_trace(self) -> bool {
+      matches!(self.level, LogLevel::Trace)
    }
 
    /// Returns `true` when dry-run mode is active.
@@ -82,6 +109,11 @@ pub trait Output {
    /// avoiding string allocation cost in non-verbose builds.
    fn verbose(&mut self, f: Box<dyn FnOnce() -> String>);
 
+   /// Emit a lazily-evaluated message, only in trace mode.
+   ///
+   /// Default implementation is a no-op.
+   fn trace(&mut self, _f: Box<dyn FnOnce() -> String>) {}
+
    /// Echo a shell command about to be run (verbose mode only).
    fn shell_command(&mut self, cmd: &str);
 
@@ -106,6 +138,14 @@ pub trait Output {
       if mode.is_verbose() {
          let owned = msg.to_owned();
          self.verbose(Box::new(move || owned));
+      }
+   }
+
+   /// Log a message in trace mode without any extra ceremony.
+   fn log_trace(&mut self, mode: OutputMode, msg: &str) {
+      if mode.is_trace() {
+         let owned = msg.to_owned();
+         self.trace(Box::new(move || owned));
       }
    }
 
@@ -173,6 +213,12 @@ impl Output for ConsoleOutput {
 
    fn verbose(&mut self, f: Box<dyn FnOnce() -> String>) {
       if self.mode.is_verbose() && !self.mode.is_quiet() {
+         print!("{}", with_prefix("| ", &f()));
+      }
+   }
+
+   fn trace(&mut self, f: Box<dyn FnOnce() -> String>) {
+      if self.mode.is_trace() {
          print!("{}", with_prefix("| ", &f()));
       }
    }
@@ -280,6 +326,10 @@ impl Output for StringOutput {
       self.buf.push_str(&with_prefix("| ", &f()));
    }
 
+   fn trace(&mut self, f: Box<dyn FnOnce() -> String>) {
+      self.buf.push_str(&with_prefix("| ", &f()));
+   }
+
    fn shell_command(&mut self, cmd: &str) {
       self.buf.push_str(&with_prefix("> ", cmd));
    }
@@ -317,7 +367,7 @@ mod tests {
    use super::*;
 
    fn verbose_mode() -> OutputMode {
-      OutputMode { verbose: true, ..Default::default() }
+      OutputMode { level: LogLevel::Verbose, ..Default::default() }
    }
 
    #[test]
