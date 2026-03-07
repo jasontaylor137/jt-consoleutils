@@ -43,6 +43,47 @@
 
 #![warn(missing_docs)]
 
+/// Emit a verbose-level message if the output is in verbose (or trace) mode.
+///
+/// The format string is only evaluated when verbose is active, so no allocation
+/// occurs in normal or quiet mode.
+///
+/// ```rust
+/// use jt_consoleutils::{verbose, output::{Output, StringOutput}};
+///
+/// let mut out = StringOutput::new();
+/// verbose!(out, "cache hit: {}", "deploy");
+/// assert!(out.log().contains("cache hit: deploy"));
+/// ```
+#[macro_export]
+macro_rules! verbose {
+   ($output:expr, $($arg:tt)*) => {
+      if $output.is_verbose() {
+         $output.emit_verbose(::std::format!($($arg)*));
+      }
+   };
+}
+
+/// Emit a trace-level message if the output is in trace mode.
+///
+/// The format string is only evaluated when trace is active.
+///
+/// ```rust
+/// use jt_consoleutils::{trace, output::{Output, StringOutput}};
+///
+/// let mut out = StringOutput::new();
+/// trace!(out, "step deps: {}", "resolved");
+/// assert!(out.log().contains("step deps: resolved"));
+/// ```
+#[macro_export]
+macro_rules! trace {
+   ($output:expr, $($arg:tt)*) => {
+      if $output.is_trace() {
+         $output.emit_trace(::std::format!($($arg)*));
+      }
+   };
+}
+
 /// Rainbow ANSI colorizer for terminal output.
 pub mod colorize;
 

@@ -60,7 +60,7 @@ pub fn run_command(
       return run_quiet(program, args);
    }
    if mode.is_verbose() {
-      return run_verbose(label, program, args, output, mode);
+      return run_verbose(label, program, args, output);
    }
    run_overlay(label, program, args, output, viewport_size)
 }
@@ -111,10 +111,9 @@ fn run_verbose(
    label: &str,
    program: &str,
    args: &[&str],
-   output: &mut dyn Output,
-   mode: OutputMode
+   output: &mut dyn Output
 ) -> Result<CommandResult, ShellError> {
-   output.log(mode, &format!("{label}..."));
+   output.emit_verbose(format!("{label}..."));
    output.shell_command(&super::format_command(program, args));
 
    let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;

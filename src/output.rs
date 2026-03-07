@@ -93,7 +93,11 @@ impl OutputMode {
 /// The three standard implementations are:
 /// - [`ConsoleOutput`] — writes to stdout, respecting `quiet` / `verbose`.
 /// - [`StringOutput`] — captures everything in a `String` for assertions.
-/// - `MockShell`'s internal output — not part of this trait, but follows the same pattern.
+///
+/// Use the [`verbose!`](crate::verbose) and [`trace!`](crate::trace) macros to
+/// emit level-gated messages — they check [`is_verbose`](Output::is_verbose) /
+/// [`is_trace`](Output::is_trace) before formatting the string, so no allocation
+/// occurs when the level is inactive.
 ///
 /// Implement this trait to redirect output to a logger, a file, or anywhere else.
 pub trait Output {
@@ -103,16 +107,24 @@ pub trait Output {
    /// Write `text` without a trailing newline. Suppressed in quiet mode.
    fn write(&mut self, text: &str);
 
-   /// Emit a lazily-evaluated message, only in verbose mode.
+   /// Returns `true` when verbose (or trace) output is active.
    ///
-   /// The closure is only called when the implementation decides to display it,
-   /// avoiding string allocation cost in non-verbose builds.
-   fn verbose(&mut self, f: Box<dyn FnOnce() -> String>);
+   /// Used by the [`verbose!`](crate::verbose) macro to guard message formatting.
+   fn is_verbose(&self) -> bool;
 
-   /// Emit a lazily-evaluated message, only in trace mode.
+   /// Emit a pre-formatted message in verbose mode.
    ///
-   /// Default implementation is a no-op.
-   fn trace(&mut self, _f: Box<dyn FnOnce() -> String>) {}
+   /// Call via the [`verbose!`](crate::verbose) macro, which guards this with
+   /// [`is_verbose`](Output::is_verbose) so the string is never allocated when inactive.
+   fn emit_verbose(&mut self, msg: String);
+
+   /// Returns `true` when trace output is active. Default: `false`.
+   fn is_trace(&self) -> bool { false }
+
+   /// Emit a pre-formatted message in trace mode. Default: no-op.
+   ///
+   /// Call via the [`trace!`](crate::trace) macro.
+   fn emit_trace(&mut self, _msg: String) {}
 
    /// Echo a shell command about to be run (verbose mode only).
    fn shell_command(&mut self, cmd: &str);
@@ -133,30 +145,17 @@ pub trait Output {
    /// Dry-run: announce a file or directory that would be deleted.
    fn dry_run_delete(&mut self, _path: &str) {}
 
-   /// Log a message in verbose mode without any extra ceremony.
-   fn log(&mut self, mode: OutputMode, msg: &str) {
-      if mode.is_verbose() {
-         let owned = msg.to_owned();
-         self.verbose(Box::new(move || owned));
-      }
-   }
-
-   /// Log a message in trace mode without any extra ceremony.
-   fn log_trace(&mut self, mode: OutputMode, msg: &str) {
-      if mode.is_trace() {
-         let owned = msg.to_owned();
-         self.trace(Box::new(move || owned));
-      }
-   }
-
-   /// Log a command about to be executed (verbose mode).
-   fn log_exec(&mut self, mode: OutputMode, cmd: &std::process::Command) {
-      if mode.is_verbose() {
+   /// Log a command about to be executed (verbose mode only).
+   fn log_exec(&mut self, cmd: &std::process::Command) {
+      if self.is_verbose() {
          let program = cmd.get_program().to_string_lossy().into_owned();
          let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-         self.verbose(Box::new(move || {
-            if args.is_empty() { format!("Exec: {program}") } else { format!("Exec: {program} {}", args.join(" ")) }
-         }));
+         let msg = if args.is_empty() {
+            format!("Exec: {program}")
+         } else {
+            format!("Exec: {program} {}", args.join(" "))
+         };
+         self.emit_verbose(msg);
       }
    }
 }
@@ -211,16 +210,20 @@ impl Output for ConsoleOutput {
       }
    }
 
-   fn verbose(&mut self, f: Box<dyn FnOnce() -> String>) {
-      if self.mode.is_verbose() && !self.mode.is_quiet() {
-         print!("{}", with_prefix("| ", &f()));
-      }
+   fn is_verbose(&self) -> bool {
+      self.mode.is_verbose()
    }
 
-   fn trace(&mut self, f: Box<dyn FnOnce() -> String>) {
-      if self.mode.is_trace() {
-         print!("{}", with_prefix("| ", &f()));
-      }
+   fn emit_verbose(&mut self, msg: String) {
+      print!("{}", with_prefix("| ", &msg));
+   }
+
+   fn is_trace(&self) -> bool {
+      self.mode.is_trace()
+   }
+
+   fn emit_trace(&mut self, msg: String) {
+      print!("{}", with_prefix("| ", &msg));
    }
 
    fn shell_command(&mut self, cmd: &str) {
@@ -279,6 +282,9 @@ impl Output for ConsoleOutput {
 /// All output is appended to an internal `String`. Call [`StringOutput::log`]
 /// to retrieve the full captured output and assert on it.
 ///
+/// `is_verbose()` and `is_trace()` both return `true` so that verbose and trace
+/// messages are always captured, allowing tests to assert on their content.
+///
 /// ```rust
 /// use jt_consoleutils::output::{Output, StringOutput};
 ///
@@ -322,12 +328,16 @@ impl Output for StringOutput {
       self.buf.push_str(text);
    }
 
-   fn verbose(&mut self, f: Box<dyn FnOnce() -> String>) {
-      self.buf.push_str(&with_prefix("| ", &f()));
+   fn is_verbose(&self) -> bool { true }
+
+   fn emit_verbose(&mut self, msg: String) {
+      self.buf.push_str(&with_prefix("| ", &msg));
    }
 
-   fn trace(&mut self, f: Box<dyn FnOnce() -> String>) {
-      self.buf.push_str(&with_prefix("| ", &f()));
+   fn is_trace(&self) -> bool { true }
+
+   fn emit_trace(&mut self, msg: String) {
+      self.buf.push_str(&with_prefix("| ", &msg));
    }
 
    fn shell_command(&mut self, cmd: &str) {
@@ -366,10 +376,6 @@ mod tests {
 
    use super::*;
 
-   fn verbose_mode() -> OutputMode {
-      OutputMode { level: LogLevel::Verbose, ..Default::default() }
-   }
-
    #[test]
    fn string_output_captures_lines() {
       let mut out = StringOutput::new();
@@ -389,15 +395,32 @@ mod tests {
    #[test]
    fn string_output_captures_verbose() {
       let mut out = StringOutput::new();
-      out.verbose(Box::new(|| "debug info".to_string()));
+      out.emit_verbose("debug info".to_string());
       assert_eq!(out.log(), "| debug info\n");
    }
 
    #[test]
    fn string_output_verbose_multiline() {
       let mut out = StringOutput::new();
-      out.verbose(Box::new(|| "line one\nline two".to_string()));
+      out.emit_verbose("line one\nline two".to_string());
       assert_eq!(out.log(), "| line one\n| line two\n");
+   }
+
+   #[test]
+   fn string_output_captures_trace() {
+      let mut out = StringOutput::new();
+      out.emit_trace("trace detail".to_string());
+      assert_eq!(out.log(), "| trace detail\n");
+   }
+
+   #[test]
+   fn string_output_is_verbose_always_true() {
+      assert!(StringOutput::new().is_verbose());
+   }
+
+   #[test]
+   fn string_output_is_trace_always_true() {
+      assert!(StringOutput::new().is_trace());
    }
 
    #[test]
@@ -415,40 +438,13 @@ mod tests {
    }
 
    #[test]
-   fn log_helper_delegates_to_verbose() {
-      // Given
-      let mut out = StringOutput::new();
-      let mode = verbose_mode();
-
-      // When
-      Output::log(&mut out, mode, "setting up cache");
-
-      // Then
-      assert_eq!(out.log(), "| setting up cache\n");
-   }
-
-   #[test]
-   fn log_helper_silent_when_not_verbose() {
-      // Given
-      let mut out = StringOutput::new();
-      let mode = OutputMode::default();
-
-      // When
-      Output::log(&mut out, mode, "setting up cache");
-
-      // Then
-      assert_eq!(out.log(), "");
-   }
-
-   #[test]
    fn log_exec_formats_command() {
       // Given
       let mut out = StringOutput::new();
-      let mode = verbose_mode();
       let cmd = std::process::Command::new("node");
 
       // When
-      Output::log_exec(&mut out, mode, &cmd);
+      out.log_exec(&cmd);
 
       // Then
       assert_eq!(out.log(), "| Exec: node\n");
@@ -458,12 +454,11 @@ mod tests {
    fn log_exec_includes_args() {
       // Given
       let mut out = StringOutput::new();
-      let mode = verbose_mode();
       let mut cmd = std::process::Command::new("pnpm");
       cmd.arg("install");
 
       // When
-      Output::log_exec(&mut out, mode, &cmd);
+      out.log_exec(&cmd);
 
       // Then
       assert_eq!(out.log(), "| Exec: pnpm install\n");
