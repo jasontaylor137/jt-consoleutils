@@ -13,6 +13,8 @@ categories = ["command-line-interface", "command-line-utilities"]
 
 [features]
 build-support = []
+verbose = []
+trace = []
 
 [dependencies]
 terminal_size = "0.4"
