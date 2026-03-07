@@ -85,6 +85,24 @@ pub struct CommandResult {
    pub stderr: String
 }
 
+impl CommandResult {
+   /// Return `Ok(())` if the command succeeded, or a `ShellError::Failed` message
+   /// that prompts the user to re-run with `--verbose`.
+   pub fn require_success(self, cmd: &str) -> Result<(), ShellError> {
+      if self.success {
+         Ok(())
+      } else {
+         Err(ShellError::Failed(format!("{cmd} failed — run with --verbose to see details")))
+      }
+   }
+
+   /// Return `Ok(())` if the command succeeded, or call `err` with the captured
+   /// stderr string to produce an error value of any type.
+   pub fn check<E>(self, err: impl FnOnce(String) -> E) -> Result<(), E> {
+      if self.success { Ok(()) } else { Err(err(self.stderr)) }
+   }
+}
+
 // ---------------------------------------------------------------------------
 // Shell trait
 // ---------------------------------------------------------------------------
