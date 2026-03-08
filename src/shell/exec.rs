@@ -59,6 +59,7 @@ pub fn run_command(
    if mode.is_quiet() {
       return run_quiet(program, args);
    }
+   #[cfg(feature = "verbose")]
    if mode.is_verbose() {
       return run_verbose(label, program, args, output);
    }
@@ -107,6 +108,7 @@ pub(super) fn run_quiet(program: &str, args: &[&str]) -> Result<CommandResult, S
 }
 
 /// Verbose mode: stream output with `| label...` header and `> ` prefixed lines.
+#[cfg(feature = "verbose")]
 fn run_verbose(
    label: &str,
    program: &str,
