@@ -3,8 +3,8 @@
 //! # Overview
 //!
 //! - [`LogLevel`](crate::output::LogLevel) — ordered enum representing the verbosity level.
-//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries a
-//!   [`LogLevel`] and the `dry_run` flag.
+//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries a [`LogLevel`]
+//!   and the `dry_run` flag.
 //! - [`Output`](crate::output::Output) — the core trait; implement it to redirect output anywhere.
 //! - [`ConsoleOutput`](crate::output::ConsoleOutput) — the production implementation; respects
 //!   `quiet` / `verbose` and writes to stdout.
@@ -29,9 +29,11 @@ pub enum LogLevel {
    #[default]
    Normal,
    /// Commands, their arguments, and verbose messages are printed.
+   #[cfg(feature = "verbose")]
    Verbose,
    /// All verbose output plus trace-level diagnostics.
-   Trace,
+   #[cfg(feature = "trace")]
+   Trace
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +45,8 @@ pub enum LogLevel {
 /// Construct with struct literal syntax or [`Default::default`] (normal level,
 /// dry-run off):
 ///
-/// ```rust
+/// ```rust,ignore
+/// // Requires the "verbose" feature to be enabled.
 /// use jt_consoleutils::output::{LogLevel, OutputMode};
 ///
 /// let mode = OutputMode { level: LogLevel::Verbose, ..OutputMode::default() };
@@ -60,9 +63,13 @@ pub struct OutputMode {
 
 impl OutputMode {
    /// Returns `true` when verbose (or trace) output is enabled.
+   #[cfg(feature = "verbose")]
    #[must_use]
    pub const fn is_verbose(self) -> bool {
-      matches!(self.level, LogLevel::Verbose | LogLevel::Trace)
+      #[cfg(feature = "trace")]
+      return matches!(self.level, LogLevel::Verbose | LogLevel::Trace);
+      #[cfg(not(feature = "trace"))]
+      return matches!(self.level, LogLevel::Verbose);
    }
 
    /// Returns `true` when quiet mode is active (all output suppressed).
@@ -72,6 +79,7 @@ impl OutputMode {
    }
 
    /// Returns `true` when trace mode is active.
+   #[cfg(feature = "trace")]
    #[must_use]
    pub const fn is_trace(self) -> bool {
       matches!(self.level, LogLevel::Trace)
@@ -110,26 +118,35 @@ pub trait Output {
    /// Returns `true` when verbose (or trace) output is active.
    ///
    /// Used by the [`verbose!`](crate::verbose) macro to guard message formatting.
+   /// Always returns `false` when the `verbose` feature is disabled.
+   #[cfg(feature = "verbose")]
    fn is_verbose(&self) -> bool;
 
    /// Emit a pre-formatted message in verbose mode.
    ///
    /// Call via the [`verbose!`](crate::verbose) macro, which guards this with
    /// [`is_verbose`](Output::is_verbose) so the string is never allocated when inactive.
+   #[cfg(feature = "verbose")]
    fn emit_verbose(&mut self, msg: String);
 
    /// Returns `true` when trace output is active. Default: `false`.
-   fn is_trace(&self) -> bool { false }
+   #[cfg(feature = "trace")]
+   fn is_trace(&self) -> bool {
+      false
+   }
 
    /// Emit a pre-formatted message in trace mode. Default: no-op.
    ///
    /// Call via the [`trace!`](crate::trace) macro.
+   #[cfg(feature = "trace")]
    fn emit_trace(&mut self, _msg: String) {}
 
    /// Echo a shell command about to be run (verbose mode only).
+   #[cfg(feature = "verbose")]
    fn shell_command(&mut self, cmd: &str);
 
    /// Echo a single line of output from a running shell command.
+   #[cfg(feature = "verbose")]
    fn shell_line(&mut self, line: &str);
 
    /// Render the result of a completed step: a tick/cross, label, elapsed time,
@@ -146,15 +163,15 @@ pub trait Output {
    fn dry_run_delete(&mut self, _path: &str) {}
 
    /// Log a command about to be executed (verbose mode only).
+   ///
+   /// No-op when the `verbose` feature is disabled.
+   #[cfg(feature = "verbose")]
    fn log_exec(&mut self, cmd: &std::process::Command) {
       if self.is_verbose() {
          let program = cmd.get_program().to_string_lossy().into_owned();
          let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-         let msg = if args.is_empty() {
-            format!("Exec: {program}")
-         } else {
-            format!("Exec: {program} {}", args.join(" "))
-         };
+         let msg =
+            if args.is_empty() { format!("Exec: {program}") } else { format!("Exec: {program} {}", args.join(" ")) };
          self.emit_verbose(msg);
       }
    }
@@ -164,6 +181,7 @@ fn format_elapsed(ms: u128) -> String {
    if ms < 1000 { format!("{ms}ms") } else { format!("{}s", ms / 1000) }
 }
 
+#[cfg(any(feature = "verbose", feature = "trace"))]
 fn with_prefix(prefix: &str, msg: &str) -> String {
    use std::fmt::Write as _;
    let mut out = String::new();
@@ -210,28 +228,34 @@ impl Output for ConsoleOutput {
       }
    }
 
+   #[cfg(feature = "verbose")]
    fn is_verbose(&self) -> bool {
       self.mode.is_verbose()
    }
 
+   #[cfg(feature = "verbose")]
    fn emit_verbose(&mut self, msg: String) {
       print!("{}", with_prefix("| ", &msg));
    }
 
+   #[cfg(feature = "trace")]
    fn is_trace(&self) -> bool {
       self.mode.is_trace()
    }
 
+   #[cfg(feature = "trace")]
    fn emit_trace(&mut self, msg: String) {
       print!("{}", with_prefix("| ", &msg));
    }
 
+   #[cfg(feature = "verbose")]
    fn shell_command(&mut self, cmd: &str) {
       if self.mode.is_verbose() && !self.mode.is_quiet() {
          println!("> {cmd}");
       }
    }
 
+   #[cfg(feature = "verbose")]
    fn shell_line(&mut self, line: &str) {
       if !self.mode.is_quiet() {
          println!("> {line}");
@@ -328,22 +352,32 @@ impl Output for StringOutput {
       self.buf.push_str(text);
    }
 
-   fn is_verbose(&self) -> bool { true }
+   #[cfg(feature = "verbose")]
+   fn is_verbose(&self) -> bool {
+      true
+   }
 
+   #[cfg(feature = "verbose")]
    fn emit_verbose(&mut self, msg: String) {
       self.buf.push_str(&with_prefix("| ", &msg));
    }
 
-   fn is_trace(&self) -> bool { true }
+   #[cfg(feature = "trace")]
+   fn is_trace(&self) -> bool {
+      true
+   }
 
+   #[cfg(feature = "trace")]
    fn emit_trace(&mut self, msg: String) {
       self.buf.push_str(&with_prefix("| ", &msg));
    }
 
+   #[cfg(feature = "verbose")]
    fn shell_command(&mut self, cmd: &str) {
       self.buf.push_str(&with_prefix("> ", cmd));
    }
 
+   #[cfg(feature = "verbose")]
    fn shell_line(&mut self, line: &str) {
       self.buf.push_str(&with_prefix("> ", line));
    }
@@ -392,6 +426,7 @@ mod tests {
       assert_eq!(out.log(), "ab");
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn string_output_captures_verbose() {
       let mut out = StringOutput::new();
@@ -399,6 +434,7 @@ mod tests {
       assert_eq!(out.log(), "| debug info\n");
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn string_output_verbose_multiline() {
       let mut out = StringOutput::new();
@@ -406,6 +442,7 @@ mod tests {
       assert_eq!(out.log(), "| line one\n| line two\n");
    }
 
+   #[cfg(feature = "trace")]
    #[test]
    fn string_output_captures_trace() {
       let mut out = StringOutput::new();
@@ -413,16 +450,19 @@ mod tests {
       assert_eq!(out.log(), "| trace detail\n");
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn string_output_is_verbose_always_true() {
       assert!(StringOutput::new().is_verbose());
    }
 
+   #[cfg(feature = "trace")]
    #[test]
    fn string_output_is_trace_always_true() {
       assert!(StringOutput::new().is_trace());
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn string_output_shell_command() {
       let mut out = StringOutput::new();
@@ -430,6 +470,7 @@ mod tests {
       assert_eq!(out.log(), "> pnpm install\n");
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn string_output_shell_line() {
       let mut out = StringOutput::new();
@@ -437,6 +478,7 @@ mod tests {
       assert_eq!(out.log(), "> installed pnpm@9.1.0\n");
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn log_exec_formats_command() {
       // Given
@@ -450,6 +492,7 @@ mod tests {
       assert_eq!(out.log(), "| Exec: node\n");
    }
 
+   #[cfg(feature = "verbose")]
    #[test]
    fn log_exec_includes_args() {
       // Given
