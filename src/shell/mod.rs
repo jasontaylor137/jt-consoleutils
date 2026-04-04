@@ -747,6 +747,14 @@ fn format_command(program: &str, args: &[&str]) -> String {
    std::iter::once(program).chain(args.iter().copied()).collect::<Vec<_>>().join(" ")
 }
 
+/// Extract the program name and arguments from a `Command` as owned strings.
+#[must_use]
+pub fn command_parts(cmd: &Command) -> (String, Vec<String>) {
+   let program = cmd.get_program().to_string_lossy().into_owned();
+   let args = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+   (program, args)
+}
+
 /// Check if a program is on PATH.
 ///
 /// Uses `which` on Unix, `where.exe` on Windows.
