@@ -191,6 +191,16 @@ fn with_prefix(prefix: &str, msg: &str) -> String {
    out
 }
 
+#[cfg(feature = "trace")]
+fn with_trace_prefix(msg: &str) -> String {
+   use std::fmt::Write as _;
+   let mut out = String::new();
+   for l in msg.lines() {
+      let _ = writeln!(out, "[2m· {l}[0m");
+   }
+   out
+}
+
 // ---------------------------------------------------------------------------
 // ConsoleOutput
 // ---------------------------------------------------------------------------
@@ -245,7 +255,7 @@ impl Output for ConsoleOutput {
 
    #[cfg(feature = "trace")]
    fn emit_trace(&mut self, msg: String) {
-      print!("{}", with_prefix("| ", &msg));
+      print!("{}", with_trace_prefix(&msg));
    }
 
    #[cfg(feature = "verbose")]
@@ -369,7 +379,7 @@ impl Output for StringOutput {
 
    #[cfg(feature = "trace")]
    fn emit_trace(&mut self, msg: String) {
-      self.buf.push_str(&with_prefix("| ", &msg));
+      self.buf.push_str(&with_prefix("· ", &msg));
    }
 
    #[cfg(feature = "verbose")]
@@ -447,7 +457,7 @@ mod tests {
    fn string_output_captures_trace() {
       let mut out = StringOutput::new();
       out.emit_trace("trace detail".to_string());
-      assert_eq!(out.log(), "| trace detail\n");
+      assert_eq!(out.log(), "· trace detail\n");
    }
 
    #[cfg(feature = "verbose")]

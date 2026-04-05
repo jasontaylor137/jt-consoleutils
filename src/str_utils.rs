@@ -96,3 +96,70 @@ mod tests {
       assert_eq!(plural(0), "s");
    }
 }
+/// Format a labelled content block for trace output.
+///
+/// Produces:
+/// ```text
+/// --- {label} ---
+/// {content, up to 300 chars}[... +N chars omitted]
+/// --------------------
+/// ```
+/// No per-line prefixing — pass the result to `trace!` which applies the dim style.
+#[cfg(feature = "trace")]
+#[must_use]
+pub fn format_trace_block(label: &str, content: &str) -> String {
+   const MAX: usize = 300;
+   let header = format!("--- {label} ---");
+   let footer = "--------------------".to_string();
+   let body = if content.len() > MAX {
+      let omitted = content.len() - MAX;
+      format!("{}[... +{omitted} chars omitted]", &content[..MAX])
+   } else {
+      content.to_string()
+   };
+   format!("{header}\n{body}\n{footer}")
+}
+
+#[cfg(all(test, feature = "trace"))]
+mod trace_tests {
+   use super::*;
+
+   #[test]
+   fn format_trace_block_short_content() {
+      // Given
+      let label = "config.json";
+      let content = "hello world";
+
+      // When
+      let result = format_trace_block(label, content);
+
+      // Then
+      assert_eq!(result, "--- config.json ---\nhello world\n--------------------");
+   }
+
+   #[test]
+   fn format_trace_block_truncates_long_content() {
+      // Given
+      let content = "x".repeat(350);
+
+      // When
+      let result = format_trace_block("label", &content);
+
+      // Then
+      assert!(result.contains("[... +50 chars omitted]"));
+      assert!(result.starts_with("--- label ---"));
+      assert!(result.ends_with("--------------------"));
+   }
+
+   #[test]
+   fn format_trace_block_exact_limit_not_truncated() {
+      // Given
+      let content = "y".repeat(300);
+
+      // When
+      let result = format_trace_block("x", &content);
+
+      // Then
+      assert!(!result.contains("omitted"));
+   }
+}
