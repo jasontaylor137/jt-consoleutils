@@ -757,15 +757,31 @@ pub fn command_parts(cmd: &Command) -> (String, Vec<String>) {
 
 /// Check if a program is on PATH.
 ///
-/// Uses `which` on Unix, `where.exe` on Windows.
+/// Scans `PATH` directories directly instead of spawning `which`/`where.exe`,
+/// avoiding a subprocess fork on every call.
 #[must_use]
 pub fn command_exists(program: &str) -> bool {
-   #[cfg(unix)]
-   let check = Command::new("which").arg(program).output();
-   #[cfg(windows)]
-   let check = Command::new("where.exe").arg(program).output();
-
-   check.is_ok_and(|o| o.status.success())
+   let path_var = std::env::var_os("PATH").unwrap_or_default();
+   let sep = if cfg!(windows) { ';' } else { ':' };
+   for dir in path_var.to_string_lossy().split(sep) {
+      if dir.is_empty() {
+         continue;
+      }
+      let candidate = std::path::Path::new(dir).join(program);
+      if candidate.is_file() {
+         return true;
+      }
+      #[cfg(windows)]
+      {
+         for ext in &["exe", "cmd", "bat", "com"] {
+            let with_ext = candidate.with_extension(ext);
+            if with_ext.is_file() {
+               return true;
+            }
+         }
+      }
+   }
+   false
 }
 
 /// Run a command and return its stdout (trimmed).
