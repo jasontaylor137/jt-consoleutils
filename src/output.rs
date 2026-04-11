@@ -3,7 +3,7 @@
 //! # Overview
 //!
 //! - [`LogLevel`](crate::output::LogLevel) — ordered enum representing the verbosity level.
-//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries a [`LogLevel`]
+//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries a [`LogLevel`](crate::output::LogLevel)
 //!   and the `dry_run` flag.
 //! - [`Output`](crate::output::Output) — the core trait; implement it to redirect output anywhere.
 //! - [`ConsoleOutput`](crate::output::ConsoleOutput) — the production implementation; respects
