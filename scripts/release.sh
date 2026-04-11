@@ -35,7 +35,7 @@ echo "  Tests passed"
 
 # Clippy
 echo "  Running clippy..."
-cargo clippy --all-features -- -D warnings --quiet 2>/dev/null
+cargo clippy --all-features --quiet -- -D warnings
 echo "  Clippy passed"
 
 # Docs
@@ -45,7 +45,7 @@ echo "  Docs passed"
 
 # Dry-run publish
 echo "  Running cargo publish --dry-run..."
-cargo publish --dry-run --quiet 2>/dev/null
+cargo publish --dry-run --quiet
 echo "  Publish dry-run passed"
 
 echo ""
