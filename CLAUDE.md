@@ -20,6 +20,18 @@ Because this is a published crate, **all `pub` items are part of the public API*
 - `cargo run --example test_shell` — visual demo of all shell output modes and spinner behaviors
 - `cargo publish --dry-run` — verify the crate packages cleanly before a real publish
 
+### Feature flags
+
+| Flag | Effect |
+|---|---|
+| `verbose` | Enables `LogLevel::Verbose`, `Output::is_verbose()`, `Output::emit_verbose()`, `Output::shell_command()`, `Output::shell_line()`, `Output::log_exec()`, and the `verbose!` macro |
+| `trace` | Enables `LogLevel::Trace`, `Output::is_trace()`, `Output::emit_trace()`, the `trace!` macro, and `str_utils::format_trace_block` |
+| `build-support` | Exposes `build_support::emit_build_info()` for use in `build.rs` |
+
+## Releasing
+
+Run `scripts/release.sh <version>` (e.g. `scripts/release.sh 0.2.0`). The script runs all checks, bumps the version, drafts a changelog from commit messages, opens `$EDITOR` for you to polish it, then commits, tags, pushes, and publishes to crates.io.
+
 ## Architecture
 
 ### Modules
@@ -27,9 +39,10 @@ Because this is a published crate, **all `pub` items are part of the public API*
 - `colors.rs` — ANSI escape constants (`RESET`, `BOLD`, `DIM`, `RED`, `GREEN`, `YELLOW`, `CYAN`)
 - `colorize.rs` — left-to-right rainbow colorizer (`colorize_text_with_width(text, Option<usize>) -> String`); emits 24-bit ANSI foreground escapes
 - `terminal.rs` — terminal width detection (`terminal_width() -> usize`; returns 80 if undetermined)
-- `output.rs` — `Output` trait, `OutputMode`, `ConsoleOutput` (production), `StringOutput` (test helper)
+- `output.rs` — `Output` trait, `OutputMode`, `LogLevel`, `ConsoleOutput` (production), `StringOutput` (test helper); `verbose!` and `trace!` macros
+- `help.rs` — help text formatting: `wrap_help_text(text, width) -> String`, `print_help(text) -> !`, `print_version(version_str) -> !`
 - `shell/` — shell execution abstraction: `Shell` trait, `ProcessShell`, `DryRunShell`, `MockShell`, `CommandResult`, `ShellError`, `ShellConfig`; internal `exec.rs` (three output modes), `overlay.rs` (spinner frame rendering), `scripted.rs` (`ScriptedShell` for visual regression tests)
-- `str_utils.rs` — general string/path utilities: `path_to_string(path) -> String`, `plural(n) -> &str`
+- `str_utils.rs` — general string/path utilities: `path_to_string`, `plural`, `format_bytes`, `format_trace_block` (feature-gated on `trace`)
 - `fs_utils.rs` — cross-platform filesystem helpers: `same_file`, `same_content`, `make_executable`, `remove_symlink_dir_like`
 - `version.rs` — shared version string formatting: `version_string(build_date, git_hash) -> String`
 
@@ -48,25 +61,37 @@ Key methods:
 |---|---|
 | `writeln(&str)` | Print a line (suppressed in quiet mode) |
 | `write(&str)` | Print without newline, flushing stdout |
-| `verbose(Box<dyn FnOnce() -> String>)` | Lazy verbose-only message with `\| ` prefix |
-| `shell_command(&str)` | Log a shell command with `> ` prefix (verbose only) |
-| `shell_line(&str)` | Log a line of shell output with `> ` prefix |
+| `is_verbose() -> bool` | Whether verbose output is active (feature: `verbose`) |
+| `emit_verbose(String)` | Emit a verbose-level message (feature: `verbose`) |
+| `is_trace() -> bool` | Whether trace output is active (feature: `trace`) |
+| `emit_trace(String)` | Emit a trace-level message (feature: `trace`) |
+| `shell_command(&str)` | Log a shell command with `> ` prefix (feature: `verbose`) |
+| `shell_line(&str)` | Log a line of shell output with `> ` prefix (feature: `verbose`) |
 | `step_result(label, success, elapsed_ms, viewport)` | Print `✓`/`✗` step summary with elapsed time |
 | `dry_run_shell(&str)` | Announce a command that would run (dry-run mode) |
 | `dry_run_write(&str)` | Announce a file that would be written |
 | `dry_run_delete(&str)` | Announce a file/dir that would be deleted |
-| `log(mode, msg)` | Convenience: emit `msg` via `verbose()` when mode is verbose |
-| `log_exec(mode, cmd)` | Convenience: format and emit a `std::process::Command` via `verbose()` |
+| `log_exec(cmd)` | Format and emit a `std::process::Command` via verbose (feature: `verbose`) |
 
-### `OutputMode` (`output.rs`)
+Convenience macros (defined in `lib.rs`):
+
+| Macro | Description |
+|---|---|
+| `verbose!(output, ...)` | Emit verbose message when feature and mode are active |
+| `trace!(output, ...)` | Emit trace message when feature and mode are active |
+
+### `OutputMode` and `LogLevel` (`output.rs`)
 
 ```rust
+pub enum LogLevel { Quiet, Normal, Verbose, Trace }
+
 pub struct OutputMode {
-    pub verbose: bool,
-    pub quiet: bool,
+    pub level: LogLevel,
     pub dry_run: bool,
 }
 ```
+
+`Verbose` and `Trace` variants are conditionally compiled behind their respective feature flags. `OutputMode` provides convenience methods: `is_verbose()`, `is_quiet()`, `is_trace()`, `is_dry_run()`.
 
 Passed through the call stack so each layer can adapt its behavior without global state.
 
@@ -86,13 +111,15 @@ Key trait methods:
 | Method | Description |
 |---|---|
 | `run_command(label, program, args, output, mode)` | Run a command with mode-appropriate output (spinner / verbose / quiet) |
-| `shell_exec(label, script, output, mode)` | Run a shell string via `bash -c` (Unix) or `powershell -Command` (Windows) |
+| `shell_exec(script, output, mode)` | Run a shell string via `bash -c` (Unix) or `powershell -Command` (Windows) |
 | `command_exists(name)` | Return whether the named binary is on `PATH` |
 | `command_output(program, args)` | Capture stdout of a command as a `String` |
-| `exec_capture(label, program, args, output, mode)` | Run a command and return `CommandResult { success, stderr }` |
-| `exec_interactive(label, program, args, output, mode)` | Run a command with inherited stdio (interactive prompts) |
+| `exec_capture(cmd, output, mode)` | Run a command and return `CommandResult` |
+| `exec_interactive(cmd, output, mode)` | Run a command with inherited stdio (interactive prompts) |
 
-`create(config, mode) -> Box<dyn Shell>` is a factory that returns `DryRunShell` when `mode.is_dry_run()` and `ProcessShell` otherwise.
+`CommandResult` has fields `success: bool`, `code: Option<i32>`, `stderr: String` and methods `require_success(cmd) -> Result<(), ShellError>` and `check(err_fn) -> Result<(), E>` for ergonomic error handling.
+
+`create(dry_run: bool) -> Box<dyn Shell>` is a factory that returns `DryRunShell` when dry-run and `ProcessShell` otherwise.
 
 ### Spinner overlay (`shell/overlay.rs`, `shell/exec.rs`)
 
@@ -112,7 +139,10 @@ These delegate to real OS behavior regardless of which `Shell` implementation is
 
 - `command_exists(name: &str) -> bool`
 - `command_output(program: &str, args: &[&str]) -> Result<String, ShellError>`
-- `shell_exec(script: &str) -> Result<ExitStatus, ShellError>`
+- `shell_exec(script: &str, output, mode, viewport_size) -> Result<CommandResult, ShellError>`
+- `run_command(label, program, args, output, mode, viewport_size) -> Result<CommandResult, ShellError>`
+- `run_passthrough(program, args, output, mode) -> Result<CommandResult, ShellError>`
+- `command_parts(cmd: &Command) -> (String, Vec<String>)`
 
 ## Code Style
 
