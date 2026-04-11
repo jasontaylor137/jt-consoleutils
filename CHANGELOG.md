@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] — 2026-04-10
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Commits since v0.1.0
+
+- add CHANGELOG and GitHub Actions CI workflow
+- corrected changelog date
+- resolve clippy issues
+- additional clippy fix
+- propagate exit code from shell
+- add require_success and check on CommandResult
+- switched to LogLevel
+- verbose and trace macros
+- verbose and trace fully conditionally compiled
+- improve feature flagging of verbose and trace
+- command_parts() function to reduce duplication
+- support word wrapping in output
+- search path directly rather than running where/which for performance
+- added release script, refreshed claude.md
+- fix clippy and publish flags in release script
+- fix broken intra-doc link for LogLevel in output module docs
+
+
 ## [0.1.0] — 2026-03-04
 
 ### Added
@@ -29,4 +57,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.2.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jasontaylor137/jt-consoleutils/releases/tag/v0.1.0
