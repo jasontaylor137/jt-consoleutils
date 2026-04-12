@@ -2,19 +2,24 @@ use std::path::Path;
 
 /// Format a byte count as a human-readable string with one decimal place.
 /// Examples: `"0 B"`, `"512 B"`, `"1.0 KB"`, `"3.5 MB"`, `"1.2 GB"`.
+///
+/// Uses integer arithmetic to avoid pulling in the ~5 KB f64 Display
+/// formatting machinery from `core::fmt::float`.
 #[must_use]
-#[allow(clippy::cast_precision_loss)]
 pub fn format_bytes(bytes: u64) -> String {
    const KB: u64 = 1024;
    const MB: u64 = 1024 * KB;
    const GB: u64 = 1024 * MB;
 
    if bytes >= GB {
-      format!("{:.1} GB", bytes as f64 / GB as f64)
+      let tenths = (bytes * 10 + GB / 2) / GB;
+      format!("{}.{} GB", tenths / 10, tenths % 10)
    } else if bytes >= MB {
-      format!("{:.1} MB", bytes as f64 / MB as f64)
+      let tenths = (bytes * 10 + MB / 2) / MB;
+      format!("{}.{} MB", tenths / 10, tenths % 10)
    } else if bytes >= KB {
-      format!("{:.1} KB", bytes as f64 / KB as f64)
+      let tenths = (bytes * 10 + KB / 2) / KB;
+      format!("{}.{} KB", tenths / 10, tenths % 10)
    } else {
       format!("{bytes} B")
    }
