@@ -1,0 +1,160 @@
+//! CLI argument parsing: global flag extraction, help/version handling, subcommand dispatch.
+
+use super::types::{CliError, CommandParser, ParsedCli};
+use crate::output::{LogLevel, OutputMode};
+
+/// Parse CLI arguments using the app's [`CommandParser`] implementation.
+///
+/// Handles global flags (`-v`/`--verbose`, `-q`/`--quiet`, `-d`/`--dry-run`,
+/// `-t`/`--trace`), `--version`, `--help`/`-h`, and `help <cmd>` before
+/// dispatching to the app's subcommand parser.
+///
+/// # Errors
+///
+/// Returns [`CliError::Conflict`] for mutually exclusive flags (`-v` + `-q`,
+/// `-q` + `-d`) and [`CliError::Usage`] for unknown subcommands when
+/// [`CommandParser::default_command`] returns `None`.
+///
+/// # Exits
+///
+/// Calls `std::process::exit(0)` for `--help` and `--version` (these are
+/// terminal actions that print and exit, matching standard CLI conventions).
+pub fn parse_cli<C: CommandParser>() -> Result<ParsedCli<C>, CliError> {
+   let args: Vec<String> = std::env::args().collect();
+
+   if args.len() <= 1 {
+      crate::help::print_help(&C::help_text());
+   }
+
+   handle_help::<C>(&args);
+
+   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
+
+   if verbose && quiet {
+      return Err(CliError::conflict("--verbose and --quiet are mutually exclusive"));
+   }
+   if quiet && dry_run {
+      return Err(CliError::conflict("--quiet and --dry-run are mutually exclusive"));
+   }
+
+   if filtered.iter().any(|a| a == "--version") {
+      crate::help::print_version(&C::version());
+   }
+
+   let level = flags_to_level(trace, verbose, quiet);
+   let mode = OutputMode { level, dry_run };
+
+   let command = dispatch::<C>(&filtered)?;
+   Ok(ParsedCli { mode, command })
+}
+
+/// Scan args for help triggers. Calls `process::exit(0)` via print_help if help is printed.
+fn handle_help<C: CommandParser>(args: &[String]) {
+   // `help` as first arg
+   if args[1] == "help" {
+      let cmd = args.get(2).map(|s| s.as_str());
+      match cmd {
+         Some(name) => {
+            // Pass remaining args after the command name (e.g. `help config show` → args=["show"])
+            let rest: Vec<String> = args[3..].to_vec();
+            if let Some(text) = C::command_help(name, &rest) {
+               crate::help::print_help(&text);
+            }
+            // Unknown subcommand after help — print main help
+            crate::help::print_help(&C::help_text());
+         }
+         None => crate::help::print_help(&C::help_text())
+      }
+   }
+
+   // -h / --help anywhere in args
+   if args.iter().any(|a| a == "-h" || a == "--help") {
+      // If a subcommand precedes -h, show its help
+      if let Some(cmd) = args.iter().skip(1).find(|a| C::subcommands().contains(&a.as_str()))
+         && let Some(text) = C::command_help(cmd, &[])
+      {
+         crate::help::print_help(&text);
+      }
+      crate::help::print_help(&C::help_text());
+   }
+}
+
+/// Extract global flags from args (skipping program name at index 0).
+/// Returns `(trace, verbose, quiet, dry_run, filtered_args)`.
+#[allow(unused_mut)]
+pub(super) fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, Vec<String>) {
+   let mut trace = false;
+   let mut verbose = false;
+   let mut quiet = false;
+   let mut dry_run = false;
+   let mut filtered: Vec<String> = Vec::new();
+   let mut past_separator = false;
+
+   for arg in args.iter().skip(1) {
+      if past_separator {
+         filtered.push(arg.clone());
+         continue;
+      }
+
+      if arg == "--" {
+         past_separator = true;
+         filtered.push(arg.clone());
+      } else if cfg!(feature = "trace") && (arg == "-t" || arg == "--trace") {
+         trace = true;
+      } else if cfg!(feature = "verbose") && (arg == "-v" || arg == "--verbose") {
+         verbose = true;
+      } else if arg == "-q" || arg == "--quiet" {
+         quiet = true;
+      } else if arg == "-d" || arg == "--dry-run" {
+         dry_run = true;
+      } else {
+         filtered.push(arg.clone());
+      }
+   }
+
+   (trace, verbose, quiet, dry_run, filtered)
+}
+
+/// Convert individual flag booleans to a [`LogLevel`].
+pub(super) fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLevel {
+   #[cfg(feature = "trace")]
+   if trace {
+      return LogLevel::Trace;
+   }
+   #[cfg(feature = "verbose")]
+   if verbose {
+      return LogLevel::Verbose;
+   }
+   let _ = (trace, verbose);
+   if quiet { LogLevel::Quiet } else { LogLevel::Normal }
+}
+
+/// Dispatch to the app's subcommand parser or default command handler.
+pub(super) fn dispatch<C: CommandParser>(filtered: &[String]) -> Result<C, CliError> {
+   let (first, rest) = match filtered.split_first() {
+      Some((f, r)) => (f.as_str(), r),
+      None => crate::help::print_help(&C::help_text())
+   };
+
+   // Check for recognized subcommand
+   if C::subcommands().contains(&first) {
+      return C::parse(first, rest);
+   }
+
+   // Not a flag → try default command
+   if !first.starts_with('-')
+      && let Some(result) = C::default_command(first, rest)
+   {
+      return result;
+   }
+
+   Err(CliError::usage(format!("unknown command: {first}")))
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+#[path = "parse_tests.rs"]
+mod tests;

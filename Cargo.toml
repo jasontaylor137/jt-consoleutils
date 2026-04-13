@@ -17,6 +17,7 @@ verbose = []
 trace = []
 
 [dependencies]
+pico-args = "0.5"
 terminal_size = "0.4"
 thiserror = "2"
 
