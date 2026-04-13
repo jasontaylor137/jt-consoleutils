@@ -4,7 +4,7 @@
 
 **Public crate.** General-purpose CLI utility library written in Rust (edition 2024). Published to [crates.io](https://crates.io) and intended for use by any Rust CLI project, not just internal tools.
 
-Provides terminal output abstractions, ANSI color helpers, a rainbow colorizer, terminal width detection, a full shell execution abstraction with spinner overlay rendering, cross-platform filesystem helpers, and general string/path utilities. Currently consumed by `vr` and `filebydaterust`.
+Provides terminal output abstractions, ANSI color helpers, a rainbow colorizer, terminal width detection, a full shell execution abstraction with spinner overlay rendering, cross-platform filesystem helpers, and general string/path utilities. Currently consumed by `sr` and `filebydaterust`.
 
 ### Public API contract
 
@@ -45,6 +45,8 @@ Run `scripts/release.sh <version>` (e.g. `scripts/release.sh 0.2.0`). The script
 - `str_utils.rs` — general string/path utilities: `path_to_string`, `plural`, `format_bytes`, `format_trace_block` (feature-gated on `trace`)
 - `fs_utils.rs` — cross-platform filesystem helpers: `same_file`, `same_content`, `make_executable`, `remove_symlink_dir_like`
 - `version.rs` — shared version string formatting: `version_string(build_date, git_hash) -> String`
+- `json/` — zero-dependency JSON/JSONC parser, serializer, and value type: `JsonValue`, `parse_json`, `parse_jsonc`, `to_json_pretty`, `FromJsonValue` trait with deserialization helpers, `ToJson` trait with `StructSerializer`, `json_deep_merge`, `json_remove_paths`
+- `cli/` — CLI parsing framework: `CommandParser` trait, `parse_cli`, global flag extraction (`-v`/`-q`/`-d`/`-t`), `--help`/`--version` handling, subcommand dispatch; uses `pico-args` for subcommand flag parsing
 
 ### `Output` trait (`output.rs`)
 
@@ -144,6 +146,40 @@ These delegate to real OS behavior regardless of which `Shell` implementation is
 - `run_passthrough(program, args, output, mode) -> Result<CommandResult, ShellError>`
 - `command_parts(cmd: &Command) -> (String, Vec<String>)`
 
+### JSON module (`json/`)
+
+Zero-dependency JSON/JSONC handling. Key components:
+
+| File | Purpose |
+|---|---|
+| `value.rs` | `JsonValue` enum — `Object(BTreeMap)`, `Array`, `String`, `Number(f64)`, `Bool`, `Null`; index operators, `PartialEq` with primitives |
+| `parser.rs` | `parse_json`, `parse_jsonc` (with `//`, `/* */` comments and trailing commas); line/column error positions; UTF-16 surrogate pair support |
+| `serialize.rs` | `to_json_pretty` — 2-space-indented pretty-printer; integers without decimal point; non-finite → `null` |
+| `deserialize.rs` | `FromJsonValue` trait and helpers (`require_string`, `optional_bool`, `optional_nested`, `deny_unknown_fields`, etc.) |
+| `to_json.rs` | `ToJson` trait and `StructSerializer` builder for direct struct → JSON string serialization (skips intermediate `JsonValue`) |
+| `ops.rs` | `json_deep_merge`, `json_remove_paths` (with empty-parent pruning) |
+| `escape.rs` | Shared JSON string escaping used by both `serialize.rs` and `to_json.rs` |
+| `error.rs` | `JsonError` — `Parse { line, col, msg }`, `Value(String)`, `Io(io::Error)` |
+
+### CLI module (`cli/`)
+
+Trait-based CLI argument parsing with global flag handling and subcommand dispatch.
+
+Apps implement `CommandParser` on their `Command` enum:
+
+| Method | Description |
+|---|---|
+| `subcommands()` | List of recognized subcommand names |
+| `parse(name, args)` | Parse a recognized subcommand with its args |
+| `default_command(first_arg, rest)` | Optional fallback for unknown first args (e.g. treat as file path) |
+| `version()` | Version string for `--version` |
+| `help_text()` | Main help text for `--help` |
+| `command_help(cmd, args)` | Per-subcommand help text |
+
+`parse_cli<C>()` extracts global flags (`-v`/`--verbose`, `-q`/`--quiet`, `-d`/`--dry-run`, `-t`/`--trace`), validates mutual exclusivity, handles `--help`/`--version`, and dispatches to the app's parser. Returns `ParsedCli<C>` with the resolved `OutputMode` and parsed command.
+
+`to_pargs(args)` converts `&[String]` to `pico_args::Arguments` for subcommand-level flag parsing.
+
 ## Code Style
 
 - Prefer small, single-responsibility modules — each module should do one thing well
@@ -183,6 +219,7 @@ These delegate to real OS behavior regardless of which `Shell` implementation is
 
 - `terminal_size` for terminal width detection
 - `thiserror` for error types
+- `pico-args` for subcommand flag parsing in the `cli` module
 - Dev: `rstest`, `tempfile`
 
 ### Dependency policy
@@ -204,7 +241,7 @@ This library owns **display and execution abstractions** with no domain coupling
 | Terminal/color/spinner primitives | App-specific path resolution, config loading |
 | General `str_utils` / `fs_utils` helpers (e.g. `plural`, `format_bytes`, `same_file`) | Domain models and business logic |
 
-See `plans/to-move-here.md` for a prioritized list of candidates to migrate from `vr` and `filebydaterust`.
+See `plans/to-move-here.md` for a prioritized list of candidates to migrate from `sr` and `filebydaterust`.
 
 ## Planning
 

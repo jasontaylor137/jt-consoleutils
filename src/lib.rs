@@ -18,6 +18,8 @@
 //! | [`str_utils`] | Human-readable byte formatting and other string helpers |
 //! | [`fs_utils`] | Filesystem comparison and permission helpers |
 //! | [`version`] | Build-info version string formatter |
+//! | [`json`] | Lightweight JSON/JSONC parser, serializer, and value type |
+//! | [`cli`] | CLI parsing framework: global flags, subcommand dispatch, help/version |
 //! | `build_support` *(feature `build-support`)* | `build.rs` helper that emits `BUILD_DATE` / `GIT_HASH` |
 //!
 //! # Quick start — output
@@ -117,6 +119,9 @@ pub mod version;
 
 /// CLI parsing framework: global flags, subcommand dispatch, help/version.
 pub mod cli;
+
+/// Lightweight JSON/JSONC parser, serializer, and value type.
+pub mod json;
 
 #[cfg(feature = "build-support")]
 /// Build-script helper that emits `BUILD_DATE` and `GIT_HASH` env vars.
