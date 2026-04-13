@@ -115,6 +115,9 @@ pub mod terminal;
 /// Build-info version string formatter.
 pub mod version;
 
+/// CLI parsing framework: global flags, subcommand dispatch, help/version.
+pub mod cli;
+
 #[cfg(feature = "build-support")]
 /// Build-script helper that emits `BUILD_DATE` and `GIT_HASH` env vars.
 pub mod build_support;
