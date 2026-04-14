@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] — 2026-04-13
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Commits since v0.2.0
+
+- version bump
+- remove reliance on float formatting
+- CLI argument processing trait template
+- add JSONC support
+- u+x on scripts/release.sh
+- clippy fix
+- sed portability fix
+- minor release.sh fix - add cargo.lock to commit
+
+
 ## [0.2.0] — 2026-04-10
 
 ### Added
@@ -57,5 +77,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.3.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jasontaylor137/jt-consoleutils/releases/tag/v0.1.0
