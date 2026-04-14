@@ -69,6 +69,10 @@ awk -v old="$CURRENT_VERSION" -v new="$VERSION" '
 ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
 echo "  Cargo.toml updated: ${CURRENT_VERSION} -> ${VERSION}"
 
+# Regenerate Cargo.lock to match the new version
+cargo check --quiet
+echo "  Cargo.lock updated"
+
 echo ""
 
 # ── 3. Draft changelog ──────────────────────────────────────────────────────
