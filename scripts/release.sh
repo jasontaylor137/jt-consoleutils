@@ -60,7 +60,13 @@ if [[ "${CURRENT_VERSION}" == "${VERSION}" ]]; then
   exit 1
 fi
 
-sed -i "0,/^version = \"${CURRENT_VERSION}\"/s//version = \"${VERSION}\"/" Cargo.toml
+awk -v old="$CURRENT_VERSION" -v new="$VERSION" '
+  !done && $0 ~ "^version = \"" old "\"" {
+    sub("\"" old "\"", "\"" new "\"")
+    done=1
+  }
+  {print}
+' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
 echo "  Cargo.toml updated: ${CURRENT_VERSION} -> ${VERSION}"
 
 echo ""
@@ -121,7 +127,7 @@ fi
 # Add link ref before existing link refs or at end
 if grep -q '^\[' CHANGELOG.md; then
   FIRST_LINK_LINE=$(grep -n '^\[' CHANGELOG.md | head -1 | cut -d: -f1)
-  sed -i "${FIRST_LINK_LINE}i\\${COMPARE_LINK}" CHANGELOG.md
+  { head -n $((FIRST_LINK_LINE - 1)) CHANGELOG.md; echo "${COMPARE_LINK}"; tail -n +"${FIRST_LINK_LINE}" CHANGELOG.md; } > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
 else
   echo "" >> CHANGELOG.md
   echo "${COMPARE_LINK}" >> CHANGELOG.md
