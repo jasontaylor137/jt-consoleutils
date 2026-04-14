@@ -21,6 +21,12 @@ pub struct StructSerializer {
    indent: usize
 }
 
+impl Default for StructSerializer {
+   fn default() -> Self {
+      Self::new()
+   }
+}
+
 impl StructSerializer {
    /// Create a new serializer starting an object (`{`).
    pub fn new() -> Self {
