@@ -159,7 +159,7 @@ echo ""
 # ── 5. Commit ────────────────────────────────────────────────────────────────
 
 echo "--- Committing release ---"
-git add Cargo.toml CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "release v${VERSION}"
 echo "  Committed"
 
