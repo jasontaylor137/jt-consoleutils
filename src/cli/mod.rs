@@ -9,5 +9,5 @@ mod parse;
 mod types;
 
 pub use helpers::to_pargs;
-pub use parse::parse_cli;
+pub use parse::{parse_cli, parse_cli_from};
 pub use types::{CliError, CommandParser, ParsedCli};
