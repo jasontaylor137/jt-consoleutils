@@ -21,14 +21,37 @@ use crate::output::{LogLevel, OutputMode};
 /// terminal actions that print and exit, matching standard CLI conventions).
 pub fn parse_cli<C: CommandParser>() -> Result<ParsedCli<C>, CliError> {
    let args: Vec<String> = std::env::args().collect();
+   parse_cli_inner::<C>(&args)
+}
 
+/// Like [`parse_cli`], but parses from a caller-supplied argv slice
+/// instead of `std::env::args()`. `argv` should NOT include the program
+/// name — this function prepends a placeholder internally so the existing
+/// `skip(1)` logic (which assumes argv[0] is the program name) is preserved.
+///
+/// Use this when the caller needs to pre-process raw argv (for example,
+/// to strip an app-specific global flag) before invoking the shared parser.
+///
+/// # Errors
+///
+/// Same conditions as [`parse_cli`].
+pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<ParsedCli<C>, CliError> {
+   let mut args: Vec<String> = Vec::with_capacity(argv.len() + 1);
+   args.push(String::new()); // program-name placeholder; consumers skip index 0
+   args.extend(argv.iter().cloned());
+   parse_cli_inner::<C>(&args)
+}
+
+/// Shared body for [`parse_cli`] and [`parse_cli_from`]. `args` is the full
+/// argv including the program name at index 0.
+fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, CliError> {
    if args.len() <= 1 {
       crate::help::print_help(&C::help_text());
    }
 
-   handle_help::<C>(&args);
+   handle_help::<C>(args);
 
-   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(args);
 
    if verbose && quiet {
       return Err(CliError::conflict("--verbose and --quiet are mutually exclusive"));

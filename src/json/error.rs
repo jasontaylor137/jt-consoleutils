@@ -9,7 +9,7 @@ pub enum JsonError {
       /// 1-based column number.
       col: usize,
       /// Human-readable error description.
-      msg: String,
+      msg: String
    },
 
    /// Semantic error during value extraction or deserialization.

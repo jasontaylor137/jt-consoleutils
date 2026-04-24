@@ -1,5 +1,4 @@
-use super::escape::push_json_string;
-use super::value::JsonValue;
+use super::{escape::push_json_string, value::JsonValue};
 
 /// Serialize a `JsonValue` to a pretty-printed JSON string with 2-space indent.
 pub fn to_json_pretty(value: &JsonValue) -> String {
