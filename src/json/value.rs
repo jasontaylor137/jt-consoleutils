@@ -10,8 +10,10 @@ pub enum JsonValue {
    Array(Vec<JsonValue>),
    /// A JSON string.
    String(String),
-   /// A JSON number (stored as `f64`).
-   Number(f64),
+   /// A JSON number, stored as the original lexeme. Lazy: `as_f64()` parses
+   /// on demand so consumers that never inspect numeric values don't drag
+   /// `<f64 as FromStr>::from_str` into the binary.
+   Number(String),
    /// A JSON boolean.
    Bool(bool),
    /// JSON `null`.
@@ -92,10 +94,21 @@ impl JsonValue {
       }
    }
 
-   /// Return the inner number as `f64`, if this is a number.
+   /// Return the inner number as `f64`, if this is a number. Parses lazily —
+   /// callers that don't invoke this avoid pulling float parsing into the
+   /// final binary.
    pub fn as_f64(&self) -> Option<f64> {
       match self {
-         JsonValue::Number(n) => Some(*n),
+         JsonValue::Number(s) => s.parse().ok(),
+         _ => None
+      }
+   }
+
+   /// Return the raw number lexeme, if this is a number. Useful for callers
+   /// that want to round-trip a value without parsing it.
+   pub fn as_number_str(&self) -> Option<&str> {
+      match self {
+         JsonValue::Number(s) => Some(s),
          _ => None
       }
    }

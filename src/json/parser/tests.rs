@@ -21,22 +21,22 @@ fn parse_false() {
 
 #[test]
 fn parse_integer() {
-   assert_eq!(parse_json("42").unwrap(), JsonValue::Number(42.0));
+   assert_eq!(parse_json("42").unwrap(), JsonValue::Number("42".into()));
 }
 
 #[test]
 fn parse_negative_integer() {
-   assert_eq!(parse_json("-7").unwrap(), JsonValue::Number(-7.0));
+   assert_eq!(parse_json("-7").unwrap(), JsonValue::Number("-7".into()));
 }
 
 #[test]
 fn parse_float() {
-   assert_eq!(parse_json("3.14").unwrap(), JsonValue::Number(3.14));
+   assert_eq!(parse_json("3.14").unwrap(), JsonValue::Number("3.14".into()));
 }
 
 #[test]
 fn parse_exponent() {
-   assert_eq!(parse_json("1e3").unwrap(), JsonValue::Number(1000.0));
+   assert_eq!(parse_json("1e3").unwrap(), JsonValue::Number("1e3".into()));
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn parse_mixed_array() {
 #[test]
 fn parse_with_leading_and_trailing_whitespace() {
    let val = parse_json("  \n  42  \n  ").unwrap();
-   assert_eq!(val, JsonValue::Number(42.0));
+   assert_eq!(val, JsonValue::Number("42".into()));
 }
 
 // ---------------------------------------------------------------------------

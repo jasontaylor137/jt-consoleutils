@@ -20,17 +20,17 @@ fn serialize_false() {
 
 #[test]
 fn serialize_integer() {
-   assert_eq!(to_json_pretty(&JsonValue::Number(42.0)), "42");
+   assert_eq!(to_json_pretty(&JsonValue::Number("42".into())), "42");
 }
 
 #[test]
 fn serialize_negative_integer() {
-   assert_eq!(to_json_pretty(&JsonValue::Number(-7.0)), "-7");
+   assert_eq!(to_json_pretty(&JsonValue::Number("-7".into())), "-7");
 }
 
 #[test]
 fn serialize_float() {
-   assert_eq!(to_json_pretty(&JsonValue::Number(3.14)), "3.14");
+   assert_eq!(to_json_pretty(&JsonValue::Number("3.14".into())), "3.14");
 }
 
 #[test]
@@ -65,8 +65,8 @@ fn serialize_simple_object() {
 #[test]
 fn serialize_object_keys_sorted() {
    let mut map = BTreeMap::new();
-   map.insert("b".into(), JsonValue::Number(2.0));
-   map.insert("a".into(), JsonValue::Number(1.0));
+   map.insert("b".into(), JsonValue::Number("2".into()));
+   map.insert("a".into(), JsonValue::Number("1".into()));
    let out = to_json_pretty(&JsonValue::Object(map));
    assert_eq!(out, "{\n  \"a\": 1,\n  \"b\": 2\n}");
 }
