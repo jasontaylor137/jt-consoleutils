@@ -370,8 +370,7 @@ impl<'a> Parser<'a> {
       }
 
       let num_str = std::str::from_utf8(&self.bytes[start..self.pos]).unwrap();
-      let n: f64 = num_str.parse().map_err(|_| self.err(format!("invalid number: {num_str}")))?;
-      Ok(JsonValue::Number(n))
+      Ok(JsonValue::Number(num_str.to_string()))
    }
 
    fn parse_literal(&mut self, expected: &[u8], value: JsonValue) -> Result<JsonValue, JsonError> {
