@@ -105,6 +105,12 @@ pub mod help;
 /// The [`output::Output`] trait and its standard implementations.
 pub mod output;
 
+/// Marker traits for binary-supplied output vocabulary.
+pub mod vocab;
+
+/// Internal rendering primitives for the typed output kinds.
+pub mod kinds;
+
 /// The [`shell::Shell`] trait and its standard implementations.
 pub mod shell;
 

@@ -115,6 +115,56 @@ pub trait Output {
    /// Write `text` without a trailing newline. Suppressed in quiet mode.
    fn write(&mut self, text: &str);
 
+   /// Write `line` followed by a newline to **stderr**.
+   /// Not suppressed by quiet mode (errors and warnings always flow).
+   fn eprintln(&mut self, line: &str) {
+      // Default: route to writeln so existing impls keep working.
+      self.writeln(line);
+   }
+
+   /// Returns `true` if this output should emit ANSI color sequences.
+   /// Default: `false` (plain output).
+   fn colors_enabled(&self) -> bool {
+      false
+   }
+
+   /// Emit a steady-state info line: `• <msg>`.
+   fn state(&mut self, msg: &str) {
+      let line = crate::kinds::render_state(msg, self.colors_enabled());
+      self.writeln(&line);
+   }
+
+   /// Emit a standalone hint line: `→ <msg>` (whole line dim).
+   fn hint(&mut self, msg: &str) {
+      let line = crate::kinds::render_hint(msg, self.colors_enabled());
+      self.writeln(&line);
+   }
+
+   /// Emit a section header: bold title.
+   fn section(&mut self, title: &str) {
+      let line = crate::kinds::render_section(title, self.colors_enabled());
+      self.writeln(&line);
+   }
+
+   /// Emit an item row under a section: 2-space indent, name, dim trailing.
+   fn item(&mut self, name: &str, trailing: &str) {
+      let line = crate::kinds::render_item(name, trailing, self.colors_enabled());
+      self.writeln(&line);
+   }
+
+   /// Emit a non-fatal warning to **stderr**: `⚠ warn: <msg>`.
+   fn warn(&mut self, msg: &str) {
+      let line = crate::kinds::render_warn(msg, self.colors_enabled());
+      self.eprintln(&line);
+   }
+
+   /// Emit a fatal-error summary to **stderr**: `✗ error: <msg>`.
+   /// **Not suppressed by `--quiet`** — errors always flow.
+   fn error(&mut self, msg: &str) {
+      let line = crate::kinds::render_error(msg, self.colors_enabled());
+      self.eprintln(&line);
+   }
+
    /// Returns `true` when verbose (or trace) output is active.
    ///
    /// Used by the [`verbose!`](crate::verbose) macro to guard message formatting.
@@ -208,18 +258,39 @@ fn with_trace_prefix(msg: &str) -> String {
 /// Production [`Output`] implementation that writes to stdout.
 ///
 /// Behavior depends on the [`OutputMode`] supplied at construction:
-/// - `quiet`: all methods are silent.
+/// - `quiet`: all methods are silent (errors still emit to stderr).
 /// - `verbose`: commands, their arguments, and verbose messages are printed.
 /// - default: normal progress messages are printed; verbose output is hidden.
+///
+/// Color rendering is determined once at construction:
+/// `colors_enabled = is_terminal(stdout) && NO_COLOR is unset`.
 pub struct ConsoleOutput {
-   mode: OutputMode
+   mode: OutputMode,
+   colors_enabled: bool
 }
 
 impl ConsoleOutput {
    /// Create a new `ConsoleOutput` driven by `mode`.
+   ///
+   /// Auto-detects whether ANSI color sequences should be emitted.
    #[must_use]
-   pub const fn new(mode: OutputMode) -> Self {
-      Self { mode }
+   pub fn new(mode: OutputMode) -> Self {
+      let colors_enabled = Self::detect_colors();
+      Self { mode, colors_enabled }
+   }
+
+   /// Create a `ConsoleOutput` with explicit color setting (useful for tests).
+   #[must_use]
+   pub const fn with_colors(mode: OutputMode, colors_enabled: bool) -> Self {
+      Self { mode, colors_enabled }
+   }
+
+   fn detect_colors() -> bool {
+      use std::io::IsTerminal;
+      if std::env::var_os("NO_COLOR").is_some() {
+         return false;
+      }
+      std::io::stdout().is_terminal()
    }
 }
 
@@ -236,6 +307,22 @@ impl Output for ConsoleOutput {
          print!("{text}");
          let _ = std::io::stdout().flush();
       }
+   }
+
+   fn eprintln(&mut self, line: &str) {
+      eprintln!("{line}");
+   }
+
+   fn colors_enabled(&self) -> bool {
+      self.colors_enabled
+   }
+
+   fn warn(&mut self, msg: &str) {
+      if self.mode.is_quiet() {
+         return;
+      }
+      let line = crate::kinds::render_warn(msg, self.colors_enabled);
+      eprintln!("{line}");
    }
 
    #[cfg(feature = "verbose")]
@@ -327,20 +414,27 @@ impl Output for ConsoleOutput {
 /// assert_eq!(out.log(), "hello\n");
 /// ```
 pub struct StringOutput {
-   buf: String
+   buf: String,
+   err_buf: String
 }
 
 impl StringOutput {
    /// Create a new, empty `StringOutput`.
    #[must_use]
    pub const fn new() -> Self {
-      Self { buf: String::new() }
+      Self { buf: String::new(), err_buf: String::new() }
    }
 
-   /// Return the full captured output as a string slice.
+   /// Return the full captured stdout output as a string slice.
    #[must_use]
    pub fn log(&self) -> &str {
       &self.buf
+   }
+
+   /// Return the full captured stderr output as a string slice.
+   #[must_use]
+   pub fn err_log(&self) -> &str {
+      &self.err_buf
    }
 }
 
@@ -360,6 +454,11 @@ impl Output for StringOutput {
 
    fn write(&mut self, text: &str) {
       self.buf.push_str(text);
+   }
+
+   fn eprintln(&mut self, line: &str) {
+      self.err_buf.push_str(line);
+      self.err_buf.push('\n');
    }
 
    #[cfg(feature = "verbose")]
@@ -419,6 +518,7 @@ mod tests {
    use rstest::rstest;
 
    use super::*;
+   use crate::kinds::OutputAction;
 
    #[test]
    fn string_output_captures_lines() {
@@ -550,5 +650,182 @@ mod tests {
       let mut out = StringOutput::new();
       out.dry_run_delete("/some/dir");
       assert_eq!(out.log(), "[dry-run] would delete: /some/dir\n");
+   }
+
+   #[test]
+   fn console_output_with_colors_disabled() {
+      // Given / When
+      let out = ConsoleOutput::with_colors(OutputMode::default(), false);
+
+      // Then
+      assert!(!out.colors_enabled());
+   }
+
+   #[test]
+   fn console_output_with_colors_enabled() {
+      // Given / When
+      let out = ConsoleOutput::with_colors(OutputMode::default(), true);
+
+      // Then
+      assert!(out.colors_enabled());
+   }
+
+   #[test]
+   fn string_output_eprintln_captures_to_separate_buffer() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.eprintln("error: something went wrong");
+
+      // Then
+      assert_eq!(out.log(), "");
+      assert_eq!(out.err_log(), "error: something went wrong\n");
+   }
+
+   #[test]
+   fn action_with_subject_no_trailing_emits_plain_line() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.action("Edited", "deploy.ts");
+
+      // Then
+      assert_eq!(out.log(), "✓ Edited deploy.ts\n");
+   }
+
+   #[test]
+   fn action_with_arrow_path_renders_arrow() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.action("Installed", "deploy").to_path("~/.sr/bin/deploy");
+
+      // Then
+      assert_eq!(out.log(), "✓ Installed deploy → ~/.sr/bin/deploy\n");
+   }
+
+   #[test]
+   fn action_with_to_renders_prep() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.action("Added", "lodash@4.17.21").to("deploy.ts");
+
+      // Then
+      assert_eq!(out.log(), "✓ Added lodash@4.17.21 to deploy.ts\n");
+   }
+
+   #[test]
+   fn action_with_hint_appends_em_dash() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.action("Edited", "deploy.ts").hint("run 'sr unedit' when done");
+
+      // Then
+      assert_eq!(out.log(), "✓ Edited deploy.ts \u{2014} run 'sr unedit' when done\n");
+   }
+
+   #[test]
+   fn action_with_note_and_hint_combines_both() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.action("Edited", "deploy.ts").note("switched from auth.ts").hint("run 'sr unedit' when done");
+
+      // Then
+      assert_eq!(out.log(), "✓ Edited deploy.ts (switched from auth.ts) \u{2014} run 'sr unedit' when done\n");
+   }
+
+   #[test]
+   fn state_emits_bullet_glyph() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.state("sr is ready");
+
+      // Then
+      assert_eq!(out.log(), "\u{2022} sr is ready\n");
+   }
+
+   #[test]
+   fn hint_emits_arrow_glyph() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.hint("run 'sr config edit' to customize");
+
+      // Then
+      assert_eq!(out.log(), "\u{2192} run 'sr config edit' to customize\n");
+   }
+
+   #[test]
+   fn section_emits_bare_title() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.section("Config files");
+
+      // Then
+      assert_eq!(out.log(), "Config files\n");
+   }
+
+   #[test]
+   fn item_with_trailing_indents_and_separates() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.item("./.sr/config.jsonc", "(local)");
+
+      // Then
+      assert_eq!(out.log(), "  ./.sr/config.jsonc  (local)\n");
+   }
+
+   #[test]
+   fn item_no_trailing_just_indents() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.item("./.sr/config.jsonc", "");
+
+      // Then
+      assert_eq!(out.log(), "  ./.sr/config.jsonc\n");
+   }
+
+   #[test]
+   fn warn_routes_to_stderr_buffer() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.warn("unknown key 'foo'");
+
+      // Then
+      assert_eq!(out.log(), "");
+      assert_eq!(out.err_log(), "\u{26A0} warn: unknown key 'foo'\n");
+   }
+
+   #[test]
+   fn error_routes_to_stderr_buffer() {
+      // Given
+      let mut out = StringOutput::new();
+
+      // When
+      out.error("could not find script 'deploy'");
+
+      // Then
+      assert_eq!(out.log(), "");
+      assert_eq!(out.err_log(), "\u{2717} error: could not find script 'deploy'\n");
    }
 }
