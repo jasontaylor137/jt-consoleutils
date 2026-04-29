@@ -114,10 +114,8 @@ fn parse_binary_name(toml: &str) -> Result<String, String> {
       if trimmed.starts_with('[') {
          in_bin_section = false;
       }
-      if in_bin_section {
-         if let Some(name) = extract_string_value(trimmed, "name") {
-            return Ok(name);
-         }
+      if in_bin_section && let Some(name) = extract_string_value(trimmed, "name") {
+         return Ok(name);
       }
    }
 
@@ -132,10 +130,8 @@ fn parse_binary_name(toml: &str) -> Result<String, String> {
       if trimmed.starts_with('[') {
          in_package_section = false;
       }
-      if in_package_section {
-         if let Some(name) = extract_string_value(trimmed, "name") {
-            return Ok(name);
-         }
+      if in_package_section && let Some(name) = extract_string_value(trimmed, "name") {
+         return Ok(name);
       }
    }
 

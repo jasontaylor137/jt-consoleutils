@@ -69,6 +69,38 @@ pub(super) fn render_frame(
    1 + shown.len()
 }
 
+/// Truncate `s` to at most `max_visible` visible columns, skipping over ANSI
+/// escape sequences (which contribute zero visible width) when counting.
+/// Any escape sequences that were opened are left open — the caller's
+/// surrounding `\x1b[0m` reset closes them.
+fn truncate_visible(s: &str, max_visible: usize) -> String {
+   let mut out = String::with_capacity(s.len());
+   let mut visible = 0usize;
+   let mut chars = s.chars().peekable();
+   while let Some(ch) = chars.next() {
+      if visible >= max_visible {
+         break;
+      }
+      out.push(ch);
+      if ch == '\x1b' {
+         // Consume the escape sequence without counting it as visible.
+         // CSI sequences: \x1b[ ... <final byte in 0x40–0x7E>
+         if chars.peek() == Some(&'[') {
+            out.push(chars.next().unwrap());
+            for inner in chars.by_ref() {
+               out.push(inner);
+               if ('\x40'..='\x7e').contains(&inner) {
+                  break;
+               }
+            }
+         }
+      } else {
+         visible += 1;
+      }
+   }
+   out
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -188,36 +220,4 @@ mod tests {
       // Only 'a','b','c' are visible. \x1b is passed through but not counted.
       assert_eq!(truncate_visible(input, 2), "\x1bab");
    }
-}
-
-/// Truncate `s` to at most `max_visible` visible columns, skipping over ANSI
-/// escape sequences (which contribute zero visible width) when counting.
-/// Any escape sequences that were opened are left open — the caller's
-/// surrounding `\x1b[0m` reset closes them.
-fn truncate_visible(s: &str, max_visible: usize) -> String {
-   let mut out = String::with_capacity(s.len());
-   let mut visible = 0usize;
-   let mut chars = s.chars().peekable();
-   while let Some(ch) = chars.next() {
-      if visible >= max_visible {
-         break;
-      }
-      out.push(ch);
-      if ch == '\x1b' {
-         // Consume the escape sequence without counting it as visible.
-         // CSI sequences: \x1b[ ... <final byte in 0x40–0x7E>
-         if chars.peek() == Some(&'[') {
-            out.push(chars.next().unwrap());
-            for inner in chars.by_ref() {
-               out.push(inner);
-               if ('\x40'..='\x7e').contains(&inner) {
-                  break;
-               }
-            }
-         }
-      } else {
-         visible += 1;
-      }
-   }
-   out
 }

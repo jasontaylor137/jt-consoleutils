@@ -7,41 +7,27 @@
 //!
 //! The functions emit 24-bit ANSI foreground escapes (`\x1b[38;2;R;G;Bm`).
 
+use std::fmt::Write as _;
+
 use crate::colors::RESET;
 
 /// Convert HSV (h in degrees 0..360, s and v in 0..1) to RGB bytes (0..255).
-#[allow(clippy::many_single_char_names)]
+#[allow(clippy::many_single_char_names, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn hsv_to_rgb(h_deg: f32, s: f32, v: f32) -> (u8, u8, u8) {
-   let h = (h_deg % 360.0 + 360.0) % 360.0;
+   let h_prime = h_deg.rem_euclid(360.0) / 60.0;
    let c = v * s;
-   let h_prime = h / 60.0;
-   let x = c * (1.0 - ((h_prime % 2.0) - 1.0).abs());
-   let (r1, g1, b1) = if (0.0..1.0).contains(&h_prime) {
-      (c, x, 0.0)
-   } else if h_prime < 2.0 {
-      (x, c, 0.0)
-   } else if h_prime < 3.0 {
-      (0.0, c, x)
-   } else if h_prime < 4.0 {
-      (0.0, x, c)
-   } else if h_prime < 5.0 {
-      (x, 0.0, c)
-   } else {
-      (c, 0.0, x)
+   let x = c * (1.0 - (h_prime.rem_euclid(2.0) - 1.0).abs());
+   let (r1, g1, b1) = match h_prime as u32 {
+      0 => (c, x, 0.0),
+      1 => (x, c, 0.0),
+      2 => (0.0, c, x),
+      3 => (0.0, x, c),
+      4 => (x, 0.0, c),
+      _ => (c, 0.0, x)
    };
    let m = v - c;
-   #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-   let r = ((r1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
-   #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-   let g = ((g1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
-   #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-   let b = ((b1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
-   (r, g, b)
-}
-
-/// Create an ANSI 24-bit foreground escape for the given RGB bytes.
-fn ansi_rgb_escape(r: u8, g: u8, b: u8) -> String {
-   format!("\x1b[38;2;{r};{g};{b}m")
+   let to_byte = |chan: f32| ((chan + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+   (to_byte(r1), to_byte(g1), to_byte(b1))
 }
 
 /// Colorize the provided `text` with a left-to-right rainbow.
@@ -53,44 +39,29 @@ fn ansi_rgb_escape(r: u8, g: u8, b: u8) -> String {
 /// The returned `String` contains newlines and ANSI escapes; print it directly.
 #[must_use]
 pub fn colorize_text_with_width(text: &str, rainbow_width: Option<usize>) -> String {
-   // Split into lines and characters so we can index columns.
-   let lines: Vec<String> = text.lines().map(str::to_owned).collect();
-   let char_lines: Vec<Vec<char>> = lines.iter().map(|l| l.chars().collect()).collect();
-
-   let max_width = char_lines.iter().map(Vec::len).max().unwrap_or(0);
-   if max_width == 0 {
-      // Nothing to color; return the original text unchanged.
+   let max_chars = text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+   if max_chars == 0 {
       return text.to_string();
    }
+   let rainbow_w = rainbow_width.unwrap_or(max_chars).max(1);
 
-   // Determine rainbow width: span the text if None.
-   let rainbow_w = rainbow_width.unwrap_or(max_width).max(1);
+   // Per-column RGB palette (12 bytes/entry, no heap-allocated escapes).
+   #[allow(clippy::cast_precision_loss)]
+   let palette: Vec<(u8, u8, u8)> =
+      (0..rainbow_w).map(|col| hsv_to_rgb((col as f32) / (rainbow_w as f32) * 360.0, 0.5, 0.99)).collect();
 
-   // Build a palette of per-column colors across rainbow_w.
-   let mut col_colors: Vec<String> = Vec::with_capacity(rainbow_w);
-   for col in 0..rainbow_w {
-      #[allow(clippy::cast_precision_loss)]
-      let t = (col as f32) / (rainbow_w.max(1) as f32); // 0..1
-      // Map to hue (degrees). Phase can be tweaked if desired.
-      let hue_deg = (t * 360.0) % 360.0;
-      // Use fairly high saturation/value for vivid output; these can be tuned.
-      let (r, g, b) = hsv_to_rgb(hue_deg, 0.5_f32.min(1.0), 0.99_f32.min(1.0));
-      col_colors.push(ansi_rgb_escape(r, g, b));
-   }
-
-   let mut result = String::new();
-   for line in &char_lines {
-      let mut col = 0usize;
-      while col < line.len() {
-         result.push_str(&col_colors[col % rainbow_w]);
-         result.push(line[col]);
-         col += 1;
+   // ANSI 24-bit escape is up to 19 bytes; reserve generously to avoid regrowth.
+   let mut out = String::with_capacity(text.len() * 20 + RESET.len());
+   for line in text.lines() {
+      for (col, ch) in line.chars().enumerate() {
+         let (r, g, b) = palette[col % rainbow_w];
+         let _ = write!(out, "\x1b[38;2;{r};{g};{b}m");
+         out.push(ch);
       }
-      result.push('\n');
+      out.push('\n');
    }
-
-   result.push_str(RESET);
-   result
+   out.push_str(RESET);
+   out
 }
 
 #[cfg(test)]

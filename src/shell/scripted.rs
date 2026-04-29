@@ -258,6 +258,65 @@ impl Shell for ScriptedShell {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Append `s` to `buf`, sending one `Line` per `\r` or `\n` terminator encountered.
+///
+/// The terminator character determines the `Line` variant:
+/// - `\r` → `Line::StdoutCr`: overwrites the last viewport slot in place.
+/// - `\n` → `Line::Stdout` / `Line::Stderr`: appends a new viewport slot.
+///
+/// Crucially, `\r` takes precedence over any `\n` characters embedded within
+/// the same chunk. The input is therefore split on `\r` first; within each
+/// `\r`-terminated segment the `\n` characters are **payload** (they represent
+/// sub-rows of a multi-line progress-bar unit) and are preserved verbatim in
+/// the emitted string. Only within segments that are ultimately `\n`-terminated
+/// (i.e. no `\r` follows) are embedded `\n` characters treated as line breaks.
+///
+/// Any text after the final terminator remains buffered for the next call.
+fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &mpsc::Sender<Line>) {
+   // Split on \r first to identify CR-terminated chunks.
+   let mut segments = s.split('\r').peekable();
+
+   while let Some(seg) = segments.next() {
+      let is_last = segments.peek().is_none();
+
+      if is_last {
+         // Tail after the last \r (or the whole string if no \r present).
+         // Within this tail, \n characters are genuine line terminators.
+         if is_stderr {
+            for ch in seg.chars() {
+               if ch == '\n' {
+                  let line = std::mem::take(buf);
+                  let _ = tx.send(Line::Stderr(line));
+               } else {
+                  buf.push(ch);
+               }
+            }
+         } else {
+            for ch in seg.chars() {
+               if ch == '\n' {
+                  let line = std::mem::take(buf);
+                  let _ = tx.send(Line::Stdout(line));
+               } else {
+                  buf.push(ch);
+               }
+            }
+         }
+      } else {
+         // This segment is followed by a \r, so the whole accumulated
+         // content (buf + seg, with any \n kept as payload) becomes a
+         // StdoutCr line.  Stderr never uses \r.
+         buf.push_str(seg);
+         let line = std::mem::take(buf);
+         if is_stderr {
+            // Treat \r as \n for stderr (shouldn't normally occur).
+            let _ = tx.send(Line::Stderr(line));
+         } else {
+            let _ = tx.send(Line::StdoutCr(line));
+         }
+      }
+   }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -569,64 +628,5 @@ mod tests {
       // Should not panic; simply verify the call completes successfully.
       let result = shell.run_command("task", "unused", &[], &mut out, default_mode()).unwrap();
       assert!(result.success);
-   }
-}
-
-/// Append `s` to `buf`, sending one `Line` per `\r` or `\n` terminator encountered.
-///
-/// The terminator character determines the `Line` variant:
-/// - `\r` → `Line::StdoutCr`: overwrites the last viewport slot in place.
-/// - `\n` → `Line::Stdout` / `Line::Stderr`: appends a new viewport slot.
-///
-/// Crucially, `\r` takes precedence over any `\n` characters embedded within
-/// the same chunk. The input is therefore split on `\r` first; within each
-/// `\r`-terminated segment the `\n` characters are **payload** (they represent
-/// sub-rows of a multi-line progress-bar unit) and are preserved verbatim in
-/// the emitted string. Only within segments that are ultimately `\n`-terminated
-/// (i.e. no `\r` follows) are embedded `\n` characters treated as line breaks.
-///
-/// Any text after the final terminator remains buffered for the next call.
-fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &mpsc::Sender<Line>) {
-   // Split on \r first to identify CR-terminated chunks.
-   let mut segments = s.split('\r').peekable();
-
-   while let Some(seg) = segments.next() {
-      let is_last = segments.peek().is_none();
-
-      if is_last {
-         // Tail after the last \r (or the whole string if no \r present).
-         // Within this tail, \n characters are genuine line terminators.
-         if is_stderr {
-            for ch in seg.chars() {
-               if ch == '\n' {
-                  let line = std::mem::take(buf);
-                  let _ = tx.send(Line::Stderr(line));
-               } else {
-                  buf.push(ch);
-               }
-            }
-         } else {
-            for ch in seg.chars() {
-               if ch == '\n' {
-                  let line = std::mem::take(buf);
-                  let _ = tx.send(Line::Stdout(line));
-               } else {
-                  buf.push(ch);
-               }
-            }
-         }
-      } else {
-         // This segment is followed by a \r, so the whole accumulated
-         // content (buf + seg, with any \n kept as payload) becomes a
-         // StdoutCr line.  Stderr never uses \r.
-         buf.push_str(seg);
-         let line = std::mem::take(buf);
-         if is_stderr {
-            // Treat \r as \n for stderr (shouldn't normally occur).
-            let _ = tx.send(Line::Stderr(line));
-         } else {
-            let _ = tx.send(Line::StdoutCr(line));
-         }
-      }
    }
 }
