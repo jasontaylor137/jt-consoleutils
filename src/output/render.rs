@@ -10,8 +10,8 @@
 use std::fmt::Write as _;
 
 use crate::{
-   colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW},
    output::Output,
+   terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW},
    vocab::AsNoun
 };
 

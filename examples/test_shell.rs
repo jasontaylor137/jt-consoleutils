@@ -10,12 +10,12 @@
 //! the step result is printed.
 
 use jt_consoleutils::{
-   colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW},
    output::{ConsoleOutput, OutputMode},
    shell::{
       Shell,
       scripted::{Script, ScriptedShell}
-   }
+   },
+   terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW}
 };
 
 // ---------------------------------------------------------------------------

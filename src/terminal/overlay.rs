@@ -3,11 +3,11 @@ use std::io::{self, Write};
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 fn term_width() -> usize {
-   crate::terminal::terminal_width()
+   super::terminal_width()
 }
 
 /// Move cursor up `n` lines and clear each line with `\r\x1b[K`, returning cursor to the top.
-pub(super) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
+pub(crate) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
    if n == 0 {
       return;
    }
@@ -26,7 +26,7 @@ pub(super) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
 /// bar stored as a single `StdoutCr` unit). Each such slot is expanded into multiple
 /// visual rows; all rows count toward `prev_lines` so the next frame erases them
 /// correctly.
-pub(super) fn render_frame(
+pub(crate) fn render_frame(
    out: &mut io::StdoutLock,
    label: &str,
    viewport: &[String],

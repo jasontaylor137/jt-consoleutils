@@ -13,7 +13,7 @@
 /// const BUILD_DATE: &str = env!("BUILD_DATE");
 /// const GIT_HASH: &str = env!("GIT_HASH");
 ///
-/// let v = jt_consoleutils::version::version_string(BUILD_DATE, GIT_HASH);
+/// let v = jt_consoleutils::cli::version::version_string(BUILD_DATE, GIT_HASH);
 /// ```
 #[must_use]
 pub fn version_string(build_date: &str, git_hash: &str) -> String {

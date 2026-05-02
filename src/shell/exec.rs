@@ -6,8 +6,11 @@ use std::{
    time::{Duration, Instant}
 };
 
-use super::{CommandResult, ShellError, overlay};
-use crate::output::{Output, OutputMode};
+use super::{CommandResult, ShellError};
+use crate::{
+   output::{Output, OutputMode},
+   terminal::overlay
+};
 
 const FRAME_INTERVAL: Duration = Duration::from_millis(80);
 

@@ -46,7 +46,7 @@ pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<ParsedCli<C>,
 /// argv including the program name at index 0.
 fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, CliError> {
    if args.len() <= 1 {
-      crate::help::print_help(&C::help_text());
+      crate::cli::help::print_help(&C::help_text());
    }
 
    handle_help::<C>(args);
@@ -61,7 +61,7 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, Cl
    }
 
    if filtered.iter().any(|a| a == "--version") {
-      crate::help::print_version(&C::version());
+      crate::cli::help::print_version(&C::version());
    }
 
    let level = flags_to_level(trace, verbose, quiet);
@@ -81,12 +81,12 @@ fn handle_help<C: CommandParser>(args: &[String]) {
             // Pass remaining args after the command name (e.g. `help config show` → args=["show"])
             let rest: Vec<String> = args[3..].to_vec();
             if let Some(text) = C::command_help(name, &rest) {
-               crate::help::print_help(&text);
+               crate::cli::help::print_help(&text);
             }
             // Unknown subcommand after help — print main help
-            crate::help::print_help(&C::help_text());
+            crate::cli::help::print_help(&C::help_text());
          }
-         None => crate::help::print_help(&C::help_text())
+         None => crate::cli::help::print_help(&C::help_text())
       }
    }
 
@@ -96,9 +96,9 @@ fn handle_help<C: CommandParser>(args: &[String]) {
       if let Some(cmd) = args.iter().skip(1).find(|a| C::subcommands().contains(&a.as_str()))
          && let Some(text) = C::command_help(cmd, &[])
       {
-         crate::help::print_help(&text);
+         crate::cli::help::print_help(&text);
       }
-      crate::help::print_help(&C::help_text());
+      crate::cli::help::print_help(&C::help_text());
    }
 }
 
@@ -156,7 +156,7 @@ pub(super) fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLeve
 pub(super) fn dispatch<C: CommandParser>(filtered: &[String]) -> Result<C, CliError> {
    let (first, rest) = match filtered.split_first() {
       Some((f, r)) => (f.as_str(), r),
-      None => crate::help::print_help(&C::help_text())
+      None => crate::cli::help::print_help(&C::help_text())
    };
 
    // Check for recognized subcommand

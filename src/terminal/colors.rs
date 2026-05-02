@@ -5,7 +5,7 @@
 //! them in format strings:
 //!
 //! ```rust
-//! use jt_consoleutils::colors::{GREEN, RESET};
+//! use jt_consoleutils::terminal::colors::{GREEN, RESET};
 //! println!("{GREEN}success{RESET}");
 //! ```
 

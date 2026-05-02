@@ -24,7 +24,6 @@ use std::{
 use crate::output::{Output, OutputMode};
 
 mod exec;
-mod overlay;
 pub mod scripted;
 
 pub use exec::{run_command, run_passthrough};

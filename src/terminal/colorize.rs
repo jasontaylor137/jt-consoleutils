@@ -9,7 +9,7 @@
 
 use std::fmt::Write as _;
 
-use crate::colors::RESET;
+use super::colors::RESET;
 
 /// Convert HSV (h in degrees 0..360, s and v in 0..1) to RGB bytes (0..255).
 #[allow(clippy::many_single_char_names, clippy::cast_possible_truncation, clippy::cast_sign_loss)]

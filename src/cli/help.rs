@@ -7,7 +7,7 @@
 //! Both functions are intended to be called from argument parsing code when
 //! `-h`/`--help` or `--version` flags are detected.
 
-use crate::{colorize::colorize_text_with_width, terminal::terminal_width};
+use crate::terminal::{colorize::colorize_text_with_width, terminal_width};
 
 /// Word-wrap each line of `text` to fit within `width` columns.
 ///
@@ -69,7 +69,7 @@ pub fn wrap_help_text(text: &str, width: usize) -> String {
 ///
 /// ```rust,ignore
 /// if args.iter().any(|a| a == "-h" || a == "--help") {
-///     jt_consoleutils::help::print_help(&build_help_text());
+///     jt_consoleutils::cli::help::print_help(&build_help_text());
 /// }
 /// ```
 pub fn print_help(text: &str) -> ! {
@@ -82,13 +82,13 @@ pub fn print_help(text: &str) -> ! {
 /// Print `version_str` to stdout and exit with code 0.
 ///
 /// Call this when `--version` is detected. `version_str` is typically produced
-/// by `jt_consoleutils::version::version_string(BUILD_DATE, GIT_HASH)`.
+/// by `jt_consoleutils::cli::version::version_string(BUILD_DATE, GIT_HASH)`.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// if raw.version {
-///     jt_consoleutils::help::print_version(&version::version_string());
+///     jt_consoleutils::cli::help::print_version(&version::version_string());
 /// }
 /// ```
 pub fn print_version(version_str: &str) -> ! {
