@@ -1,4 +1,9 @@
 /// JSON parse/conversion error with optional position information.
+///
+/// Pure JSON-layer errors — no I/O. File-reading helpers in
+/// [`crate::fs_utils`] wrap this in `FsError::Parse` when they fail to
+/// parse a file, keeping the I/O context (`io::Error` + path) and the JSON
+/// context separate.
 #[derive(Debug, thiserror::Error)]
 pub enum JsonError {
    /// Syntax error at a specific line and column.
@@ -14,11 +19,7 @@ pub enum JsonError {
 
    /// Semantic error during value extraction or deserialization.
    #[error("{0}")]
-   Value(String),
-
-   /// I/O error (e.g. reading a JSON file from disk).
-   #[error("{0}")]
-   Io(#[from] std::io::Error)
+   Value(String)
 }
 
 impl JsonError {

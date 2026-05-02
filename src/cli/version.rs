@@ -1,3 +1,9 @@
+//! Build-info version string formatter.
+//!
+//! Combines a build date and a git short hash into a compact `--version`
+//! string. The two values are typically injected at compile time via
+//! [`crate::build_support::emit_build_info`] in `build.rs`.
+
 /// Returns the version string in the format "yyyy-mm-dd (hash)".
 ///
 /// Both values are typically injected at build time via `build.rs` using

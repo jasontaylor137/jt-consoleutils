@@ -27,7 +27,7 @@ pub fn parse_cli<C: CommandParser>() -> Result<ParsedCli<C>, CliError> {
 /// Like [`parse_cli`], but parses from a caller-supplied argv slice
 /// instead of `std::env::args()`. `argv` should NOT include the program
 /// name — this function prepends a placeholder internally so the existing
-/// `skip(1)` logic (which assumes argv[0] is the program name) is preserved.
+/// `skip(1)` logic (which assumes `argv[0]` is the program name) is preserved.
 ///
 /// Use this when the caller needs to pre-process raw argv (for example,
 /// to strip an app-specific global flag) before invoking the shared parser.

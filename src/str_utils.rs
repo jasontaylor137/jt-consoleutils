@@ -1,3 +1,9 @@
+//! Small string and path formatting helpers used across CLI output.
+//!
+//! These are deliberately allocation-free where possible (`plural` returns a
+//! `&'static str`) and avoid pulling in `f64`-formatting machinery (`format_bytes`
+//! uses integer arithmetic).
+
 use std::path::Path;
 
 /// Format a byte count as a human-readable string with one decimal place.

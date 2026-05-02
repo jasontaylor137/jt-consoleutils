@@ -54,44 +54,63 @@ impl FileStats {
    /// paired with `"duplicate"`. The noun is pluralized automatically.
    ///
    /// `show_bytes` selects between the two summary formats; see [`ShowBytes`].
+   ///
+   /// ANSI color codes are emitted only when `output.colors_enabled()` is
+   /// true, so the same call works correctly on a TTY, in a piped log, and
+   /// in tests.
    pub fn display(&self, output: &mut dyn Output, verb: &str, noun: &str, show_bytes: ShowBytes) {
+      let colors = output.colors_enabled();
       output.writeln("");
-      output.writeln(&format!("{BOLD}--- Summary ---{RESET}"));
+      output.writeln(&heading(colors));
 
       let count = self.files_acted;
       let noun_suffix = plural(count);
-      let errors_part = self.format_errors_part();
+      let errors_part = self.format_errors_part(colors);
 
       match show_bytes {
          ShowBytes::Yes => {
             let bytes_str = format_bytes(self.bytes_freed);
-            output.writeln(&format!(
-               "{GREEN}{verb} {count} {noun}{noun_suffix}{RESET}, freed {bytes_str}, {errors_part}"
-            ));
+            let action = action_part(verb, count, noun, noun_suffix, colors);
+            output.writeln(&format!("{action}, freed {bytes_str}, {errors_part}"));
          }
          ShowBytes::No => {
-            let skipped_part = self.format_skipped_part();
-            output.writeln(&format!(
-               "{GREEN}{verb} {count} {noun}{noun_suffix}{RESET} ({skipped_part}, {errors_part})"
-            ));
+            let action = action_part(verb, count, noun, noun_suffix, colors);
+            let skipped_part = self.format_skipped_part(colors);
+            output.writeln(&format!("{action} ({skipped_part}, {errors_part})"));
          }
       }
    }
 
-   fn format_errors_part(&self) -> String {
-      if self.errors > 0 {
-         format!("{RED}{} error{}{RESET}", self.errors, plural(self.errors))
+   fn format_errors_part(&self, colors: bool) -> String {
+      let n = self.errors;
+      if !colors {
+         return if n > 0 { format!("{n} error{}", plural(n)) } else { "0 errors".to_string() };
+      }
+      if n > 0 {
+         format!("{RED}{n} error{}{RESET}", plural(n))
       } else {
          format!("{GREEN}0 errors{RESET}")
       }
    }
 
-   fn format_skipped_part(&self) -> String {
-      if self.files_skipped > 0 {
-         format!("{YELLOW}{} skipped{RESET}", self.files_skipped)
-      } else {
-         format!("{GREEN}0 skipped{RESET}")
+   fn format_skipped_part(&self, colors: bool) -> String {
+      let n = self.files_skipped;
+      if !colors {
+         return if n > 0 { format!("{n} skipped") } else { "0 skipped".to_string() };
       }
+      if n > 0 { format!("{YELLOW}{n} skipped{RESET}") } else { format!("{GREEN}0 skipped{RESET}") }
+   }
+}
+
+fn heading(colors: bool) -> String {
+   if colors { format!("{BOLD}--- Summary ---{RESET}") } else { "--- Summary ---".to_string() }
+}
+
+fn action_part(verb: &str, count: usize, noun: &str, noun_suffix: &str, colors: bool) -> String {
+   if colors {
+      format!("{GREEN}{verb} {count} {noun}{noun_suffix}{RESET}")
+   } else {
+      format!("{verb} {count} {noun}{noun_suffix}")
    }
 }
 
@@ -163,5 +182,15 @@ mod tests {
       let mut out = StringOutput::new();
       stats.display(&mut out, "Copied", "file", ShowBytes::No);
       assert!(out.log().contains("2 errors"));
+   }
+
+   #[test]
+   fn display_emits_no_ansi_when_colors_disabled() {
+      // StringOutput::colors_enabled() is false by default — the summary should
+      // be plain text with no escape sequences.
+      let stats = FileStats { files_processed: 5, files_acted: 3, files_skipped: 1, errors: 1, bytes_freed: 2048 };
+      let mut out = StringOutput::new();
+      stats.display(&mut out, "Copied", "file", ShowBytes::Yes);
+      assert!(!out.log().contains('\x1b'), "expected no ANSI escapes, got: {:?}", out.log());
    }
 }

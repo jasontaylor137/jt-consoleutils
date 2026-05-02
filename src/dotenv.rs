@@ -1,8 +1,8 @@
 //! `.env` file loader (gated on `feature = "dotenv"`).
 //!
-//! Wraps [`dotenvy`] with a `thiserror`-based [`DotenvError`] that includes the
-//! offending file path and line number, plus an "absent file → empty result"
-//! convenience semantic.
+//! Wraps `dotenvy` with a `thiserror`-based [`DotenvError`](crate::dotenv::DotenvError)
+//! that includes the offending file path and line number, plus an
+//! "absent file → empty result" convenience semantic.
 
 use std::{collections::HashMap, io, io::ErrorKind, path::Path};
 

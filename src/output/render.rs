@@ -15,7 +15,7 @@ use crate::{
    vocab::AsNoun
 };
 
-/// Trailing context attached to an [`crate::output::Output::action`].
+/// Trailing context attached to an [`OutputAction::action`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Trailing {
    /// Arrow-prefixed path: ` → /some/path`.
@@ -155,7 +155,7 @@ pub fn count_phrase(n: usize, singular: &str, plural: &str) -> String {
    if n == 1 { format!("{n} {singular}") } else { format!("{n} {plural}") }
 }
 
-/// Drop-guard builder for [`Output::action`].
+/// Drop-guard builder for [`OutputAction::action`].
 ///
 /// Emits the rendered line on Drop. Chainable methods set trailing context;
 /// passing none emits the bare `✓ <Verb> <subject>` form.
@@ -220,27 +220,33 @@ impl<'a> ActionBuilder<'a> {
 /// Extension trait that adds the typed [`OutputAction::action`] method to any
 /// type implementing [`Output`]. Because the method is generic over `AsVerb`,
 /// it cannot live on the dyn-compatible [`Output`] trait directly — this
-/// extension trait is auto-implemented for every `Output` (including
-/// `dyn Output`), and pulls the typed method into method-call position.
+/// extension trait is auto-implemented for every concrete `Output` and
+/// separately for `dyn Output`, pulling the typed method into method-call
+/// position.
 pub trait OutputAction {
    /// Begin emitting an action line. Accepts any `impl AsVerb` (typically a
    /// project-specific `Verb` enum).
-   fn action<'a, V: crate::vocab::AsVerb>(&'a mut self, verb: V, subject: &str) -> ActionBuilder<'a>;
+   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_>;
+}
+
+// Two near-identical impls: one for `dyn Output` (which doesn't satisfy
+// `Sized`, so the generic blanket can't cover it) and one for concrete
+// `T: Output`. Bodies delegate to the same helper.
+fn build_action<'a>(out: &'a mut (dyn Output + 'a), verb: &str, subject: &str) -> ActionBuilder<'a> {
+   let colors = out.colors_enabled();
+   let subj = if subject.is_empty() { None } else { Some(subject.to_string()) };
+   ActionBuilder::new(out, verb.to_string(), subj, colors)
 }
 
 impl OutputAction for dyn Output + '_ {
-   fn action<'a, V: crate::vocab::AsVerb>(&'a mut self, verb: V, subject: &str) -> ActionBuilder<'a> {
-      let colors = self.colors_enabled();
-      let subj = if subject.is_empty() { None } else { Some(subject.to_string()) };
-      ActionBuilder::new(self, verb.as_verb().to_string(), subj, colors)
+   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
+      build_action(self, verb.as_verb(), subject)
    }
 }
 
-impl<T: Output + 'static> OutputAction for T {
-   fn action<'a, V: crate::vocab::AsVerb>(&'a mut self, verb: V, subject: &str) -> ActionBuilder<'a> {
-      let colors = self.colors_enabled();
-      let subj = if subject.is_empty() { None } else { Some(subject.to_string()) };
-      ActionBuilder::new(self, verb.as_verb().to_string(), subj, colors)
+impl<T: Output> OutputAction for T {
+   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
+      build_action(self, verb.as_verb(), subject)
    }
 }
 

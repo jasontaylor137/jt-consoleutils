@@ -136,6 +136,7 @@ impl Progress {
    }
 
    fn draw(&mut self, output: &mut dyn Output) {
+      let colors = output.colors_enabled();
       let filled = (self.current * self.bar_width).checked_div(self.total).unwrap_or(0);
       let empty = self.bar_width - filled;
       let counter = format!("{}/{}", self.current, self.total);
@@ -143,12 +144,21 @@ impl Progress {
       // Track visual width (excludes ANSI escape codes).
       let mut visual_len = self.prefix.len() + 1 + self.bar_width + 2 + counter.len(); // prefix[###---] n/m
 
-      let mut line =
-         format!("{}[{GREEN}{}{RESET}{DIM}{}{RESET}] {counter}", self.prefix, "#".repeat(filled), "-".repeat(empty));
+      let bar_filled = "#".repeat(filled);
+      let bar_empty = "-".repeat(empty);
+      let mut line = if colors {
+         format!("{}[{GREEN}{bar_filled}{RESET}{DIM}{bar_empty}{RESET}] {counter}", self.prefix)
+      } else {
+         format!("{}[{bar_filled}{bar_empty}] {counter}", self.prefix)
+      };
 
       if self.substatus_shown && !self.substatus.is_empty() {
          visual_len += self.substatus.len();
-         line.push_str(&format!("{DIM}{}{RESET}", self.substatus));
+         if colors {
+            line.push_str(&format!("{DIM}{}{RESET}", self.substatus));
+         } else {
+            line.push_str(&self.substatus);
+         }
       }
 
       // Pad with spaces to overwrite any leftover characters from the previous render.

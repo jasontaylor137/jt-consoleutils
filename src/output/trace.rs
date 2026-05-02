@@ -17,9 +17,11 @@ pub fn format_trace_block(label: &str, content: &str) -> String {
    const MAX: usize = 300;
    let header = format!("--- {label} ---");
    let footer = "--------------------".to_string();
-   let body = if content.len() > MAX {
-      let omitted = content.len() - MAX;
-      format!("{}[... +{omitted} chars omitted]", &content[..MAX])
+   let total_chars = content.chars().count();
+   let body = if total_chars > MAX {
+      let kept: String = content.chars().take(MAX).collect();
+      let omitted = total_chars - MAX;
+      format!("{kept}[... +{omitted} chars omitted]")
    } else {
       content.to_string()
    };
@@ -50,5 +52,20 @@ mod tests {
       let content = "y".repeat(300);
       let result = format_trace_block("x", &content);
       assert!(!result.contains("omitted"));
+   }
+
+   #[test]
+   fn format_trace_block_truncates_on_char_boundary_for_multibyte() {
+      // 'é' is 2 bytes; 200 of them = 400 bytes but 200 chars. With a 300-char
+      // window, all 200 chars fit and nothing is truncated.
+      let content = "é".repeat(200);
+      let result = format_trace_block("x", &content);
+      assert!(!result.contains("omitted"));
+
+      // 400 'é' chars exceed the 300-char window; truncation happens on a
+      // char boundary (not a byte boundary, which would have panicked).
+      let content = "é".repeat(400);
+      let result = format_trace_block("x", &content);
+      assert!(result.contains("[... +100 chars omitted]"));
    }
 }

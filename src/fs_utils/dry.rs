@@ -2,11 +2,15 @@
 //!
 //! These compose [`Output::dry_run_write`] / [`Output::dry_run_delete`] with
 //! `std::fs::write` / `remove_file` and the idempotent
-//! [`write_if_changed`](super::write_if_changed): in dry-run mode they log
-//! intent and return without touching the filesystem; in normal mode they
-//! perform the operation and (with the `verbose` feature) emit a verbose
-//! message naming the file. They are the file-op counterpart of
-//! [`crate::shell::DryRunShell`].
+//! [`write_if_changed`]: in dry-run mode they log intent and return without
+//! touching the filesystem; in normal mode they perform the operation and
+//! (with the `verbose` feature) emit a verbose message naming the file. They
+//! are the file-op counterpart of [`DryRunShell`].
+//!
+//! [`Output::dry_run_write`]: crate::output::Output::dry_run_write
+//! [`Output::dry_run_delete`]: crate::output::Output::dry_run_delete
+//! [`write_if_changed`]: super::write_if_changed
+//! [`DryRunShell`]: crate::shell::DryRunShell
 
 use std::path::Path;
 

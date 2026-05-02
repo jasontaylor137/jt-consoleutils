@@ -1,6 +1,6 @@
 //! [`ConsoleOutput`] — production [`Output`] writing to stdout/stderr.
 
-#[cfg(any(feature = "verbose", feature = "trace"))]
+#[cfg(feature = "verbose")]
 use super::with_prefix;
 #[cfg(feature = "trace")]
 use super::with_trace_prefix;
@@ -115,12 +115,16 @@ impl Output for ConsoleOutput {
          return;
       }
       let t = format_elapsed(elapsed_ms);
-      if success {
-         println!("\x1b[32m✓\x1b[0m {label} \x1b[2m({t})\x1b[0m");
-      } else {
-         println!("\x1b[31m✗\x1b[0m {label} \x1b[2m({t})\x1b[0m");
+      let (header, viewport_line): (String, fn(&str) -> String) = match (success, self.colors_enabled) {
+         (true, true) => (format!("\x1b[32m✓\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  {l}")),
+         (true, false) => (format!("✓ {label} ({t})"), |l| format!("  {l}")),
+         (false, true) => (format!("\x1b[31m✗\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  \x1b[31m{l}\x1b[0m")),
+         (false, false) => (format!("✗ {label} ({t})"), |l| format!("  {l}"))
+      };
+      println!("{header}");
+      if !success {
          for line in viewport {
-            println!("  \x1b[31m{line}\x1b[0m");
+            println!("{}", viewport_line(line));
          }
       }
    }

@@ -22,8 +22,8 @@ pub mod value;
 // Re-export the public API from a single entry point.
 
 pub use deserialize::{
-   FromJsonValue, deny_unknown_fields, expect_object, optional_bool, optional_map_of, optional_nested, optional_string,
-   optional_string_map, optional_string_vec, require_string
+   FromJsonValue, deny_unknown_fields, expect_object, optional_bool, optional_f64, optional_i64, optional_map_of,
+   optional_nested, optional_string, optional_string_map, optional_string_vec, require_f64, require_string
 };
 pub use error::JsonError;
 pub use ops::{json_deep_merge, json_remove_paths};

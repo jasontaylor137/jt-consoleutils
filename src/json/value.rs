@@ -44,6 +44,36 @@ impl JsonValue {
 
    // -- type checks -----------------------------------------------------------
 
+   /// Return `true` if this is an object.
+   pub fn is_object(&self) -> bool {
+      matches!(self, JsonValue::Object(_))
+   }
+
+   /// Return `true` if this is an array.
+   pub fn is_array(&self) -> bool {
+      matches!(self, JsonValue::Array(_))
+   }
+
+   /// Return `true` if this is a string.
+   pub fn is_string(&self) -> bool {
+      matches!(self, JsonValue::String(_))
+   }
+
+   /// Return `true` if this is a number.
+   pub fn is_number(&self) -> bool {
+      matches!(self, JsonValue::Number(_))
+   }
+
+   /// Return `true` if this is a boolean.
+   pub fn is_bool(&self) -> bool {
+      matches!(self, JsonValue::Bool(_))
+   }
+
+   /// Return `true` if this is `null`.
+   pub fn is_null(&self) -> bool {
+      matches!(self, JsonValue::Null)
+   }
+
    // -- accessors -------------------------------------------------------------
 
    /// Get a child value by key (objects only). Returns `None` for non-objects
@@ -152,6 +182,55 @@ impl std::ops::Index<usize> for JsonValue {
          JsonValue::Array(a) => a.get(idx).unwrap_or(&NULL),
          _ => &NULL
       }
+   }
+}
+
+// -- From<T> for ergonomic value construction --------------------------------
+//
+// Only `i64` and `f64` are provided for numbers — narrower integer types
+// should `as i64`. This keeps the API surface small.
+
+impl From<&str> for JsonValue {
+   fn from(s: &str) -> Self {
+      JsonValue::String(s.to_string())
+   }
+}
+
+impl From<String> for JsonValue {
+   fn from(s: String) -> Self {
+      JsonValue::String(s)
+   }
+}
+
+impl From<bool> for JsonValue {
+   fn from(b: bool) -> Self {
+      JsonValue::Bool(b)
+   }
+}
+
+impl From<i64> for JsonValue {
+   fn from(n: i64) -> Self {
+      JsonValue::Number(n.to_string())
+   }
+}
+
+impl From<f64> for JsonValue {
+   fn from(n: f64) -> Self {
+      // Non-finite values aren't representable in JSON; emit `null` to match
+      // the round-trip behavior callers expect from `serde_json`.
+      if n.is_finite() { JsonValue::Number(n.to_string()) } else { JsonValue::Null }
+   }
+}
+
+impl From<Vec<JsonValue>> for JsonValue {
+   fn from(v: Vec<JsonValue>) -> Self {
+      JsonValue::Array(v)
+   }
+}
+
+impl From<BTreeMap<String, JsonValue>> for JsonValue {
+   fn from(m: BTreeMap<String, JsonValue>) -> Self {
+      JsonValue::Object(m)
    }
 }
 

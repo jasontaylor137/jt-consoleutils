@@ -55,6 +55,42 @@ pub fn optional_string(
    }
 }
 
+/// Extract a required `f64` numeric field.
+pub fn require_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<f64, JsonError> {
+   match map.get(key) {
+      Some(JsonValue::Number(s)) => s
+         .parse::<f64>()
+         .map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'"))),
+      Some(other) => Err(type_err(context, key, "number", other.type_name())),
+      None => Err(JsonError::value(format!("{context}.{key}: required field missing")))
+   }
+}
+
+/// Extract an optional `f64` numeric field. Missing or `null` → `None`.
+pub fn optional_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<f64>, JsonError> {
+   match map.get(key) {
+      Some(JsonValue::Number(s)) => s
+         .parse::<f64>()
+         .map(Some)
+         .map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'"))),
+      Some(JsonValue::Null) | None => Ok(None),
+      Some(other) => Err(type_err(context, key, "number", other.type_name()))
+   }
+}
+
+/// Extract an optional `i64` numeric field. Missing or `null` → `None`. Non-integer
+/// numeric values (e.g. `1.5`) are rejected.
+pub fn optional_i64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<i64>, JsonError> {
+   match map.get(key) {
+      Some(JsonValue::Number(s)) => s
+         .parse::<i64>()
+         .map(Some)
+         .map_err(|_| JsonError::value(format!("{context}.{key}: expected integer, got '{s}'"))),
+      Some(JsonValue::Null) | None => Ok(None),
+      Some(other) => Err(type_err(context, key, "number", other.type_name()))
+   }
+}
+
 /// Extract an optional bool field.
 pub fn optional_bool(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<bool>, JsonError> {
    match map.get(key) {
@@ -118,14 +154,26 @@ pub fn optional_string_map(
 }
 
 /// Extract an optional nested type that implements `FromJsonValue`.
-pub fn optional_nested<T: FromJsonValue>(map: &BTreeMap<String, JsonValue>, key: &str) -> Result<Option<T>, JsonError> {
+///
+/// Inner errors are wrapped with `"{context}.{key}: "` so the path to the
+/// failing field is visible in the error message.
+pub fn optional_nested<T: FromJsonValue>(
+   map: &BTreeMap<String, JsonValue>,
+   key: &str,
+   context: &str
+) -> Result<Option<T>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Null) | None => Ok(None),
-      Some(v) => T::from_json_value(v).map(Some)
+      Some(v) => T::from_json_value(v)
+         .map(Some)
+         .map_err(|e| JsonError::value(format!("{context}.{key}: {e}")))
    }
 }
 
 /// Extract an optional `HashMap<String, T>` where T implements FromJsonValue.
+///
+/// Inner errors are wrapped with `"{context}.{key}.{k}: "` so the path to
+/// the failing entry is visible in the error message.
 pub fn optional_map_of<T: FromJsonValue>(
    map: &BTreeMap<String, JsonValue>,
    key: &str,
@@ -135,7 +183,9 @@ pub fn optional_map_of<T: FromJsonValue>(
       Some(JsonValue::Object(obj)) => {
          let mut out = HashMap::with_capacity(obj.len());
          for (k, v) in obj {
-            out.insert(k.clone(), T::from_json_value(v)?);
+            let parsed = T::from_json_value(v)
+               .map_err(|e| JsonError::value(format!("{context}.{key}.{k}: {e}")))?;
+            out.insert(k.clone(), parsed);
          }
          Ok(Some(out))
       }

@@ -1,9 +1,9 @@
 //! Marker traits for binary-supplied output vocabulary.
 //!
 //! Binaries that use this crate may define their own `Verb` / `Noun` enums and
-//! implement [`AsVerb`] / [`AsNoun`] on them. The output methods that take these
-//! types accept `impl AsVerb` / `impl AsNoun`, so call sites read as
-//! `out.action(Verb::Edited, "x")` without `.as_str()` plumbing.
+//! implement [`AsVerb`](crate::vocab::AsVerb) / [`AsNoun`](crate::vocab::AsNoun) on them.
+//! The output methods that take these types accept `impl AsVerb` / `impl AsNoun`,
+//! so call sites read as `out.action(Verb::Edited, "x")` without `.as_str()` plumbing.
 //!
 //! For binaries that want a small declarative `Verb` / `Noun` enum derived
 //! directly from variant identifiers, see the [`verb_enum!`](crate::verb_enum)

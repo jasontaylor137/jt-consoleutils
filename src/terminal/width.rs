@@ -1,3 +1,8 @@
+//! Terminal width detection.
+//!
+//! Wraps the `terminal_size` crate with a sensible 80-column fallback so
+//! callers don't need to handle the "not a terminal" case themselves.
+
 use terminal_size::{Width, terminal_size};
 
 /// Returns the current terminal width in columns, or 80 if it cannot be determined.

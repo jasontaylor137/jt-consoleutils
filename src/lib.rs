@@ -12,12 +12,15 @@
 //! | [`output`] | [`output::Output`] trait, [`output::ConsoleOutput`], [`output::StringOutput`], [`output::OutputMode`] |
 //! | [`shell`] | [`shell::Shell`] trait, [`shell::ProcessShell`], [`shell::DryRunShell`], [`shell::MockShell`] |
 //! | [`terminal`] | ANSI colors, rainbow colorizer, terminal width detection |
-//! | [`help`] | Help / version printing helpers |
-//! | [`str_utils`] | Human-readable byte formatting and other string helpers |
-//! | [`fs_utils`] | Filesystem comparison and permission helpers |
-//! | [`version`] | Build-info version string formatter |
+//! | [`cli`] | CLI parsing framework: global flags, subcommand dispatch, help/version printing |
 //! | [`json`] | Lightweight JSON/JSONC parser, serializer, and value type |
-//! | [`cli`] | CLI parsing framework: global flags, subcommand dispatch, help/version |
+//! | [`fs_utils`] | Filesystem comparison, permission helpers, JSON file I/O |
+//! | [`paths`] | Path manipulation: home dir, normalization, PATH membership |
+//! | [`str_utils`] | Human-readable byte formatting and other string helpers |
+//! | [`envvars`] | `${VAR}` expansion from the process environment |
+//! | [`signals`] | SIGINT / Ctrl+C handling for graceful shutdown |
+//! | [`vocab`] | `AsVerb` / `AsNoun` traits for action-line vocabulary |
+//! | [`dotenv`] *(feature `dotenv`)* | `.env` file loader |
 //! | `build_support` *(feature `build-support`)* | `build.rs` helper that emits `BUILD_DATE` / `GIT_HASH` |
 //!
 //! # Quick start — output

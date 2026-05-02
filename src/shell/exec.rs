@@ -1,5 +1,5 @@
 use std::{
-   io::{self, BufRead},
+   io::{self, BufRead, IsTerminal},
    process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio},
    sync::mpsc,
    thread,
@@ -45,7 +45,10 @@ struct SpawnedCommand {
 /// Run a shell command with mode-appropriate output:
 /// - **quiet**: collect output silently
 /// - **verbose**: stream with `| label...` and `> ` prefixed lines
-/// - **default**: animated spinner overlay with scrolling viewport
+/// - **default + TTY**: animated spinner overlay with scrolling viewport
+/// - **default + non-TTY**: collect silently, then emit `step_result` (the
+///   spinner has no meaningful non-interactive form, so we fall back to
+///   end-of-run reporting)
 ///
 /// # Errors
 ///
@@ -65,6 +68,9 @@ pub fn run_command(
    #[cfg(feature = "verbose")]
    if mode.is_verbose() {
       return run_verbose(label, program, args, output);
+   }
+   if !io::stdout().is_terminal() {
+      return run_non_tty(label, program, args, output, viewport_size);
    }
    run_overlay(label, program, args, output, viewport_size)
 }
@@ -124,6 +130,52 @@ fn run_verbose(
    let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
    let stderr_lines = collect_stderr_lines(lines, |line| output.shell_line(line));
    let status = wait_and_join(program, child, readers)?;
+
+   Ok(CommandResult { success: status.success(), code: status.code(), stderr: stderr_lines.join("\n") })
+}
+
+/// Default mode without a TTY: collect output silently, then emit a single
+/// `step_result` at the end. The spinner overlay has no meaningful
+/// non-interactive form (cursor moves and line erases are TTY-only), so we
+/// fall back to end-of-run reporting that's safe to write into a log file.
+fn run_non_tty(
+   label: &str,
+   program: &str,
+   args: &[&str],
+   output: &mut dyn Output,
+   viewport_size: usize
+) -> Result<CommandResult, ShellError> {
+   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
+   let start = Instant::now();
+   let mut viewport: Vec<String> = Vec::new();
+   let mut stderr_lines: Vec<String> = Vec::new();
+
+   for line in lines {
+      let text = line.text().to_string();
+      match line {
+         Line::StdoutCr(_) => {
+            if let Some(last) = viewport.last_mut() {
+               *last = text;
+            } else {
+               viewport.push(text);
+            }
+         }
+         Line::Stderr(s) => {
+            stderr_lines.push(s.clone());
+            viewport.push(s);
+         }
+         Line::Stdout(_) => viewport.push(text)
+      }
+   }
+
+   let elapsed = start.elapsed();
+   let status = wait_and_join(program, child, readers)?;
+
+   // Trim to last viewport_size lines so a long-running command doesn't dump
+   // hundreds of failure lines into the log on a single failure.
+   let start_idx = viewport.len().saturating_sub(viewport_size);
+   let trimmed = &viewport[start_idx..];
+   output.step_result(label, status.success(), elapsed.as_millis(), trimmed);
 
    Ok(CommandResult { success: status.success(), code: status.code(), stderr: stderr_lines.join("\n") })
 }
@@ -285,4 +337,33 @@ fn wait_and_join(
    }
 
    Ok(status)
+}
+
+#[cfg(test)]
+mod tests {
+   use super::*;
+   use crate::output::StringOutput;
+
+   /// Under `cargo test`, stdout is not a terminal, so `run_command` in default
+   /// mode dispatches to `run_non_tty`. This exercises that path end-to-end:
+   /// real subprocess, real line accumulation, real step_result emission.
+   #[test]
+   #[cfg(unix)]
+   fn run_command_non_tty_emits_step_result_for_success() {
+      let mut out = StringOutput::new();
+      let result =
+         run_command("echo step", "echo", &["hello"], &mut out, OutputMode::default(), 5).expect("spawn echo");
+      assert!(result.success);
+      assert!(out.log().contains("✓ echo step"), "expected step_result in log, got: {}", out.log());
+   }
+
+   #[test]
+   #[cfg(unix)]
+   fn run_command_non_tty_reports_failure_with_step_result() {
+      let mut out = StringOutput::new();
+      let result =
+         run_command("fail step", "false", &[], &mut out, OutputMode::default(), 5).expect("spawn false");
+      assert!(!result.success);
+      assert!(out.log().contains("✗ fail step"), "expected failure step_result, got: {}", out.log());
+   }
 }

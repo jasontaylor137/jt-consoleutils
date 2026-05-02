@@ -77,13 +77,17 @@ pub fn script_dir(path: &Path) -> &Path {
    }
 }
 
-/// Extract the filename from a path, falling back to `"index.ts"`.
+/// Extract the filename from a path. Returns `None` for paths with no
+/// final component (e.g. `/`) or whose filename isn't valid UTF-8.
+///
+/// Callers decide their own fallback — this helper stays neutral about
+/// what a "default filename" should look like.
 #[must_use]
-pub fn script_filename(path: &Path) -> &str {
-   path.file_name().and_then(|f| f.to_str()).unwrap_or("index.ts")
+pub fn script_filename(path: &Path) -> Option<&str> {
+   path.file_name().and_then(|f| f.to_str())
 }
 
-/// Strip the file extension for display (e.g. `"node.ts"` → `"node"`).
+/// Strip the file extension for display (e.g. `"deploy.sh"` → `"deploy"`).
 /// Uses `Path::file_stem`, which strips only the last extension.
 #[must_use]
 pub fn strip_extension(filename: &str) -> String {
@@ -202,22 +206,17 @@ mod tests {
    // -- strip_extension --
 
    #[test]
-   fn strip_extension_removes_ts() {
-      assert_eq!(strip_extension("node.ts"), "node");
+   fn strip_extension_removes_sh() {
+      assert_eq!(strip_extension("deploy.sh"), "deploy");
    }
 
    #[test]
-   fn strip_extension_removes_js() {
-      assert_eq!(strip_extension("script.js"), "script");
+   fn strip_extension_strips_last_extension_only() {
+      assert_eq!(strip_extension("archive.tar.gz"), "archive.tar");
    }
 
    #[test]
-   fn strip_extension_strips_last_extension() {
-      assert_eq!(strip_extension("data.json"), "data");
-   }
-
-   #[test]
-   fn strip_extension_no_extension() {
+   fn strip_extension_no_extension_returns_input() {
       assert_eq!(strip_extension("deploy"), "deploy");
    }
 
@@ -248,11 +247,11 @@ mod tests {
 
    #[test]
    fn script_filename_returns_basename() {
-      assert_eq!(script_filename(Path::new("/a/b/deploy.ts")), "deploy.ts");
+      assert_eq!(script_filename(Path::new("/a/b/deploy.sh")), Some("deploy.sh"));
    }
 
    #[test]
-   fn script_filename_falls_back_when_no_filename() {
-      assert_eq!(script_filename(Path::new("/")), "index.ts");
+   fn script_filename_returns_none_for_root() {
+      assert_eq!(script_filename(Path::new("/")), None);
    }
 }

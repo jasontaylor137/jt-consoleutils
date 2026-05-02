@@ -1,3 +1,14 @@
+//! Filesystem helpers with rich error context.
+//!
+//! Provides a unified [`FsError`](crate::fs_utils::FsError) type whose
+//! contextualized variants (`Read`, `Write`, `Remove`, `Chmod`, `CreateDir`,
+//! `Parse`) carry the offending path so error messages name the file that
+//! failed. Higher-level helpers in this module (`read_json_file`,
+//! `write_if_changed`, etc.) always produce the contextualized form.
+//!
+//! For dry-run-aware variants of write/remove that route through the
+//! [`Output`](crate::output::Output) trait, see [`dry`](crate::fs_utils::dry).
+
 use std::{io, path::Path};
 
 use crate::{

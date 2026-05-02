@@ -1,3 +1,12 @@
+//! `build.rs` helper that emits `BUILD_DATE` and `GIT_HASH` for downstream
+//! `env!()` use.
+//!
+//! Gated behind the `build-support` feature. Computes the build date with
+//! `std::time` (no chrono/time dependency) and the git short hash with a
+//! `git rev-parse` subprocess (falling back to `"unknown"` if git is
+//! unavailable, the directory isn't a repo, or the command fails). Pair with
+//! [`crate::cli::version::version_string`] to render a `--version` line.
+
 use std::{
    process::Command,
    time::{SystemTime, UNIX_EPOCH}
@@ -72,11 +81,14 @@ fn compute_build_date() -> String {
 }
 
 fn compute_git_hash() -> String {
-   Command::new("git")
-      .args(["rev-parse", "--short", "HEAD"])
-      .output()
-      .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-      .unwrap_or_else(|_| "unknown".to_string())
+   let Ok(output) = Command::new("git").args(["rev-parse", "--short", "HEAD"]).output() else {
+      return "unknown".to_string();
+   };
+   if !output.status.success() {
+      return "unknown".to_string();
+   }
+   let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+   if hash.is_empty() { "unknown".to_string() } else { hash }
 }
 
 fn is_leap(y: u64) -> bool {

@@ -1,14 +1,14 @@
-//! The [`Output`] trait and its standard implementations.
+//! The [`Output`](crate::output::Output) trait and its standard implementations.
 //!
 //! # Overview
 //!
-//! - [`LogLevel`] — ordered enum representing the verbosity level.
-//! - [`OutputMode`] — a plain `Copy` struct that carries a [`LogLevel`] and the `dry_run` flag.
-//! - [`Output`] — the core trait; implement it to redirect output anywhere.
-//! - [`ConsoleOutput`] — the production implementation; respects `quiet` / `verbose` and writes to
+//! - [`LogLevel`](crate::output::LogLevel) — ordered enum representing the verbosity level.
+//! - [`OutputMode`](crate::output::OutputMode) — a plain `Copy` struct that carries a `LogLevel` and the `dry_run` flag.
+//! - [`Output`](crate::output::Output) — the core trait; implement it to redirect output anywhere.
+//! - [`ConsoleOutput`](crate::output::ConsoleOutput) — the production implementation; respects `quiet` / `verbose` and writes to
 //!   stdout.
-//! - [`StringOutput`] — an in-memory implementation for use in tests; captures all output in a
-//!   `String` that can be inspected with [`StringOutput::log`].
+//! - [`StringOutput`](crate::output::StringOutput) — an in-memory implementation for use in tests; captures all output in a
+//!   `String` that can be inspected with [`StringOutput::log`](crate::output::StringOutput::log).
 
 mod console;
 pub mod file_stats;
