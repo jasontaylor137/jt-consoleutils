@@ -11,7 +11,9 @@
 //!   `String` that can be inspected with [`StringOutput::log`].
 
 mod console;
+pub mod file_stats;
 mod mode;
+pub mod progress;
 pub mod render;
 mod string;
 

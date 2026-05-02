@@ -61,6 +61,15 @@ pub enum FsError {
       #[source]
       source: io::Error
    },
+   /// Failed to create the directory at `path`.
+   #[error("create dir {path}: {source}")]
+   CreateDir {
+      /// Path of the directory whose creation failed.
+      path: String,
+      /// Underlying I/O error.
+      #[source]
+      source: io::Error
+   },
    /// Failed to parse the file at `path` as JSON(C).
    #[error("parse {path}: {source}")]
    Parse {
@@ -94,6 +103,11 @@ impl FsError {
    /// Construct a [`FsError::Chmod`] for `path`.
    pub fn chmod(path: &Path, source: io::Error) -> Self {
       Self::Chmod { path: path_to_string(path), source }
+   }
+
+   /// Construct a [`FsError::CreateDir`] for `path`.
+   pub fn create_dir(path: &Path, source: io::Error) -> Self {
+      Self::CreateDir { path: path_to_string(path), source }
    }
 
    /// Construct a [`FsError::Parse`] for `path`.
@@ -168,6 +182,19 @@ pub fn write_json_file_pretty<T: ToJson>(path: &Path, value: &T) -> Result<(), F
    let json = value.to_json_pretty();
    std::fs::write(path, format!("{json}\n")).map_err(|e| FsError::write(path, e))?;
    Ok(())
+}
+
+/// Return `<dir-of-current-exe>/<filename>` if such a file exists, otherwise
+/// `None`. Useful for "config.json sitting next to the binary" defaults.
+///
+/// Returns `None` if the current executable path can't be resolved or the
+/// candidate file doesn't exist. Callers typically fall back to a
+/// CWD-relative path.
+#[must_use]
+pub fn exe_adjacent_path(filename: &str) -> Option<std::path::PathBuf> {
+   let exe = std::env::current_exe().ok()?;
+   let candidate = exe.with_file_name(filename);
+   candidate.is_file().then_some(candidate)
 }
 
 /// Check whether two paths refer to the same file on disk.
@@ -625,5 +652,33 @@ mod tests {
          panic!("expected FsError::Chmod, got {err:?}");
       };
       assert!(p.contains("nope.txt"), "expected path in error, got: {p}");
+   }
+
+   // -- exe_adjacent_path --
+
+   #[test]
+   fn exe_adjacent_path_returns_none_when_file_missing() {
+      // Given — a filename that won't exist next to the test binary
+      let result = exe_adjacent_path("nonexistent-xyz-config.json");
+
+      // Then
+      assert!(result.is_none());
+   }
+
+   #[test]
+   fn exe_adjacent_path_returns_path_when_file_exists() {
+      // Given — drop a file next to the current test exe
+      let exe = std::env::current_exe().unwrap();
+      let candidate = exe.with_file_name("exe-adjacent-test-marker.tmp");
+      fs::write(&candidate, b"").unwrap();
+
+      // When
+      let result = exe_adjacent_path("exe-adjacent-test-marker.tmp");
+
+      // Then
+      assert_eq!(result.as_deref(), Some(candidate.as_path()));
+
+      // Cleanup
+      let _ = fs::remove_file(&candidate);
    }
 }
