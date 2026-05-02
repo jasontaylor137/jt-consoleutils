@@ -88,6 +88,84 @@ macro_rules! trace {
    }};
 }
 
+/// Generate an enum + [`AsVerb`](crate::vocab::AsVerb) impl whose verb string
+/// is the variant identifier (via [`stringify!`]).
+///
+/// ```rust
+/// use jt_consoleutils::{verb_enum, vocab::AsVerb};
+///
+/// verb_enum! {
+///    pub enum Verb {
+///       Created,
+///       Removed,
+///    }
+/// }
+///
+/// assert_eq!(Verb::Created.as_verb(), "Created");
+/// ```
+#[macro_export]
+macro_rules! verb_enum {
+   ($vis:vis enum $name:ident { $($variant:ident),* $(,)? }) => {
+      /// Action verb vocabulary. Variant identifier IS the rendered verb.
+      #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+      #[allow(dead_code)]
+      $vis enum $name {
+         $(
+            #[allow(missing_docs)]
+            $variant,
+         )*
+      }
+
+      impl $crate::vocab::AsVerb for $name {
+         fn as_verb(&self) -> &str {
+            match self { $(Self::$variant => stringify!($variant)),* }
+         }
+      }
+   };
+}
+
+/// Generate an enum + [`AsNoun`](crate::vocab::AsNoun) impl. Singular and
+/// plural forms are supplied as string literals.
+///
+/// ```rust
+/// use jt_consoleutils::{noun_enum, vocab::AsNoun};
+///
+/// noun_enum! {
+///    pub enum Noun {
+///       Dep => "dep" / "deps",
+///       Tool => "tool" / "tools",
+///    }
+/// }
+///
+/// assert_eq!(Noun::Dep.singular(), "dep");
+/// assert_eq!(Noun::Dep.plural(), "deps");
+/// ```
+#[macro_export]
+macro_rules! noun_enum {
+   ($vis:vis enum $name:ident {
+      $($variant:ident => $singular:literal / $plural:literal),* $(,)?
+   }) => {
+      /// Object noun vocabulary used for count phrases.
+      #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+      #[allow(dead_code)]
+      $vis enum $name {
+         $(
+            #[allow(missing_docs)]
+            $variant,
+         )*
+      }
+
+      impl $crate::vocab::AsNoun for $name {
+         fn singular(&self) -> &str {
+            match self { $(Self::$variant => $singular),* }
+         }
+         fn plural(&self) -> &str {
+            match self { $(Self::$variant => $plural),* }
+         }
+      }
+   };
+}
+
 /// `.env` file loader (feature-gated on `dotenv`).
 #[cfg(feature = "dotenv")]
 pub mod dotenv;
@@ -97,6 +175,9 @@ pub mod envvars;
 
 /// Filesystem helpers: path comparison, permission bits, symlink removal.
 pub mod fs_utils;
+
+/// Path-manipulation helpers: home dir, normalization, script-dir/-filename, PATH presence.
+pub mod paths;
 
 /// SIGINT (Ctrl+C) handling so post-run cleanup hooks survive an interrupt.
 pub mod signals;

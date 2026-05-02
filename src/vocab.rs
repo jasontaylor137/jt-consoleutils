@@ -4,6 +4,10 @@
 //! implement [`AsVerb`] / [`AsNoun`] on them. The output methods that take these
 //! types accept `impl AsVerb` / `impl AsNoun`, so call sites read as
 //! `out.action(Verb::Edited, "x")` without `.as_str()` plumbing.
+//!
+//! For binaries that want a small declarative `Verb` / `Noun` enum derived
+//! directly from variant identifiers, see the [`verb_enum!`](crate::verb_enum)
+//! and [`noun_enum!`](crate::noun_enum) macros.
 
 /// Convertible to a verb string for action rendering.
 ///
