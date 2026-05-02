@@ -88,8 +88,18 @@ macro_rules! trace {
    }};
 }
 
+/// `.env` file loader (feature-gated on `dotenv`).
+#[cfg(feature = "dotenv")]
+pub mod dotenv;
+
+/// Process-environment `${VAR}` expansion helper.
+pub mod envvars;
+
 /// Filesystem helpers: path comparison, permission bits, symlink removal.
 pub mod fs_utils;
+
+/// SIGINT (Ctrl+C) handling so post-run cleanup hooks survive an interrupt.
+pub mod signals;
 
 /// The [`output::Output`] trait and its standard implementations.
 pub mod output;
