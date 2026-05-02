@@ -173,6 +173,20 @@ pub fn read_json_file<T: FromJsonValue>(path: &Path) -> Result<T, FsError> {
    Ok(parsed)
 }
 
+/// Read and parse a JSONC file (JSON with `//` / `/* */` comments and
+/// trailing commas) at `path` into `T`.
+///
+/// # Errors
+///
+/// Returns [`FsError::Read`] if the file cannot be read, or [`FsError::Parse`]
+/// if it cannot be parsed as JSONC or converted into `T`.
+pub fn read_jsonc_file<T: FromJsonValue>(path: &Path) -> Result<T, FsError> {
+   let content = std::fs::read_to_string(path).map_err(|e| FsError::read(path, e))?;
+   let value = json::parse_jsonc(&content).map_err(|e| FsError::parse(path, e))?;
+   let parsed = T::from_json_value(&value).map_err(|e| FsError::parse(path, e))?;
+   Ok(parsed)
+}
+
 /// Serialize `value` as pretty JSON and write it to `path` with a trailing newline.
 ///
 /// # Errors
@@ -580,6 +594,77 @@ mod tests {
          panic!("expected FsError::Parse, got {err:?}");
       };
       assert!(p.contains("bad.json"), "expected path in error, got: {p}");
+   }
+
+   // -- read_jsonc_file --
+
+   #[test]
+   fn read_jsonc_file_parses_valid_jsonc() {
+      // Given — JSONC with line comment, block comment, and trailing comma
+      let dir = TempDir::new().unwrap();
+      let path = dir.path().join("data.jsonc");
+      fs::write(
+         &path,
+         r#"{
+            // line comment
+            /* block comment */
+            "k": "value",
+         }"#
+      )
+      .unwrap();
+
+      // When
+      let doc: Doc = read_jsonc_file(&path).unwrap();
+
+      // Then
+      assert_eq!(doc, Doc("value".to_string()));
+   }
+
+   #[test]
+   fn read_jsonc_file_parses_strict_json_too() {
+      // Given — JSONC parser must accept ordinary JSON
+      let dir = TempDir::new().unwrap();
+      let path = dir.path().join("data.json");
+      fs::write(&path, r#"{"k":"value"}"#).unwrap();
+
+      // When
+      let doc: Doc = read_jsonc_file(&path).unwrap();
+
+      // Then
+      assert_eq!(doc, Doc("value".to_string()));
+   }
+
+   #[test]
+   fn read_jsonc_file_returns_read_error_with_path_when_missing() {
+      // Given — no file
+      let dir = TempDir::new().unwrap();
+      let path = dir.path().join("missing.jsonc");
+
+      // When
+      let err: FsError = read_jsonc_file::<Doc>(&path).unwrap_err();
+
+      // Then — Read variant carries the path
+      let FsError::Read { path: p, .. } = err else {
+         panic!("expected FsError::Read, got {err:?}");
+      };
+      assert!(p.contains("missing.jsonc"), "expected path in error, got: {p}");
+   }
+
+   #[test]
+   fn read_jsonc_file_returns_parse_error_with_path_on_invalid_jsonc() {
+      // Given
+      let dir = TempDir::new().unwrap();
+      let path = dir.path().join("bad.jsonc");
+      fs::write(&path, "not valid {{{\n").unwrap();
+
+      // When
+      let err: FsError = read_jsonc_file::<Doc>(&path).unwrap_err();
+
+      // Then — Parse variant carries the path
+      let FsError::Parse { path: p, .. } = err else {
+         panic!("expected FsError::Parse, got {err:?}");
+      };
+      assert!(p.contains("bad.jsonc"), "expected path in error, got: {p}");
    }
 
    // -- write_json_file_pretty --
