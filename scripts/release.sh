@@ -172,8 +172,19 @@ echo ""
 # ── 6. Tag ───────────────────────────────────────────────────────────────────
 
 echo "--- Tagging ${TAG} ---"
-git tag "${TAG}"
-echo "  Tagged"
+HEAD_SHA=$(git rev-parse HEAD)
+if EXISTING_SHA=$(git rev-parse --verify --quiet "refs/tags/${TAG}"); then
+  if [[ "${EXISTING_SHA}" == "${HEAD_SHA}" ]]; then
+    echo "  Tag ${TAG} already exists at HEAD; skipping"
+  else
+    echo "ERROR: tag ${TAG} already exists at ${EXISTING_SHA} (HEAD is ${HEAD_SHA})."
+    echo "       Delete or move the tag manually before re-running."
+    exit 1
+  fi
+else
+  git tag "${TAG}"
+  echo "  Tagged"
+fi
 
 echo ""
 
@@ -181,7 +192,18 @@ echo ""
 
 echo "--- Pushing to remote ---"
 git push
-git push --tags
+# `git push --tags` rejects when any tag already exists remotely with a different
+# SHA. For our tag we've verified above that local matches HEAD, so push it
+# explicitly; if the remote already has it at the same SHA the push is a no-op.
+REMOTE_TAG_SHA=$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')
+if [[ -z "${REMOTE_TAG_SHA}" ]]; then
+  git push origin "refs/tags/${TAG}"
+elif [[ "${REMOTE_TAG_SHA}" == "${HEAD_SHA}" ]]; then
+  echo "  Remote already has ${TAG} at HEAD; skipping tag push"
+else
+  echo "ERROR: remote tag ${TAG} points to ${REMOTE_TAG_SHA}, not HEAD (${HEAD_SHA})."
+  exit 1
+fi
 echo "  Pushed"
 
 echo ""
