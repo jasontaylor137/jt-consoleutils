@@ -332,6 +332,15 @@ impl MockShell {
    pub fn calls(&self) -> Vec<String> {
       self.calls.borrow().clone()
    }
+
+   /// Push a `CommandResult` onto the back of the `exec_capture` queue.
+   ///
+   /// Each call to `exec_capture` pops one result from the front. Use this
+   /// instead of mutating `exec_capture_results` directly so callers don't
+   /// need to know the underlying container type.
+   pub fn push_capture(&self, result: CommandResult) {
+      self.exec_capture_results.borrow_mut().push_back(result);
+   }
 }
 
 impl Shell for MockShell {
