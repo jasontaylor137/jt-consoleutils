@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] — 2026-05-03
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Commits since v0.3.0
+
+- version bump
+- add parse_cli_from, also minor formatting fixes
+- perf: store JSON numbers as String to drop f64 parse path
+- refactor(output): typed-vocabulary abstraction with Verb/Noun enums and ActionBuilder
+- perf(colorize): single-alloc rainbow render — palette as RGB triples
+- rearranged modules for better cohesion
+- additional functionality from SR
+- finish (for now) move of functionality from SR to jt-consoleutils
+- various progress & file stat capabilities
+- add read_jsonc_file symmetric to read_json_file
+- broad audit pass: docs, color routing, API expansion, bug fixes
+- feat: add CliError::ShowHelp variant for help-text responses
+- Add Output::summary(verb) for subject-less action lines
+- add MockShell::push_capture
+- fix windows build, update rstest
+- cargo:rerun-if-changed
+
+
 ## [0.3.0] — 2026-04-13
 
 ### Added
@@ -77,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.4.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jasontaylor137/jt-consoleutils/releases/tag/v0.1.0
