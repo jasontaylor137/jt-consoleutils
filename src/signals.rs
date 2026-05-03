@@ -118,7 +118,7 @@ extern "C" fn handle_sigint(_: libc::c_int) {
 }
 
 #[cfg(windows)]
-unsafe extern "system" fn handle_ctrl_c(ctrl_type: u32) -> windows_sys::Win32::Foundation::BOOL {
+unsafe extern "system" fn handle_ctrl_c(ctrl_type: u32) -> windows_sys::core::BOOL {
    use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT};
    if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_BREAK_EVENT {
       INTERRUPTED.store(true, Ordering::Relaxed);

@@ -30,5 +30,5 @@ libc = "0.2"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 
 [dev-dependencies]
-rstest = "0.25"
+rstest = "0.26"
 tempfile = "3"
