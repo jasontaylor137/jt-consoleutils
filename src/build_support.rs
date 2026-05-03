@@ -47,6 +47,48 @@ pub fn emit_build_info() {
    let git_hash = compute_git_hash();
    println!("cargo:rustc-env=BUILD_DATE={}", build_date);
    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+   emit_git_rerun_directives();
+}
+
+/// Tell Cargo to re-run `build.rs` whenever git state changes, so `GIT_HASH`
+/// stays in sync with `HEAD`. Without these directives Cargo treats the build
+/// script's inputs as unchanged across commits and reuses the cached
+/// `rustc-env` value indefinitely — symptom: `--version` keeps reporting an
+/// ancient hash until you `rm -rf target/`.
+///
+/// Watches three paths inside the gitdir reported by `git rev-parse --git-dir`
+/// (which correctly resolves worktrees and `gitdir:` redirection files):
+///
+/// - `HEAD` — changes on `git checkout <branch>` and on detached-HEAD moves.
+/// - The branch ref file (e.g. `refs/heads/main`) — changes on `git commit`
+///   when a branch is checked out. Skipped on detached HEAD where there's no
+///   ref to watch.
+/// - `packed-refs` — covers freshly cloned / GC'd repos where refs have been
+///   packed into a single file and the per-branch loose-ref file doesn't
+///   exist yet.
+///
+/// Failures (not a git repo, git not installed, unreadable HEAD) silently
+/// no-op — same fallback policy as `compute_git_hash`.
+fn emit_git_rerun_directives() {
+   let Ok(output) = Command::new("git").args(["rev-parse", "--git-dir"]).output() else {
+      return;
+   };
+   if !output.status.success() {
+      return;
+   }
+   let git_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+   if git_dir.is_empty() {
+      return;
+   }
+
+   println!("cargo:rerun-if-changed={git_dir}/HEAD");
+   println!("cargo:rerun-if-changed={git_dir}/packed-refs");
+
+   if let Ok(head) = std::fs::read_to_string(format!("{git_dir}/HEAD"))
+      && let Some(refname) = head.strip_prefix("ref: ").map(str::trim)
+   {
+      println!("cargo:rerun-if-changed={git_dir}/{refname}");
+   }
 }
 
 fn compute_build_date() -> String {
