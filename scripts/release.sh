@@ -73,6 +73,22 @@ echo "  Cargo.toml updated: ${CURRENT_VERSION} -> ${VERSION}"
 cargo check --quiet
 echo "  Cargo.lock updated"
 
+# Update the dep-line in README.md (e.g. `jt-consoleutils = "0.3"` -> `... = "0.4"`)
+CRATE_NAME=$(grep '^name = ' Cargo.toml | head -1 | sed 's/name = "\(.*\)"/\1/')
+MAJOR_MINOR="${VERSION%.*}"
+if grep -qE "^${CRATE_NAME} = \"[0-9]+\.[0-9]+\"" README.md; then
+  awk -v name="$CRATE_NAME" -v mm="$MAJOR_MINOR" '
+    !done && $0 ~ "^" name " = \"[0-9]+\\.[0-9]+\"" {
+      sub("\"[0-9]+\\.[0-9]+\"", "\"" mm "\"")
+      done=1
+    }
+    {print}
+  ' README.md > README.tmp && mv README.tmp README.md
+  echo "  README.md updated: ${CRATE_NAME} = \"${MAJOR_MINOR}\""
+else
+  echo "  README.md has no \`${CRATE_NAME} = \"X.Y\"\` line; skipping"
+fi
+
 echo ""
 
 # ── 3. Draft changelog ──────────────────────────────────────────────────────
@@ -163,7 +179,7 @@ echo ""
 # ── 5. Commit ────────────────────────────────────────────────────────────────
 
 echo "--- Committing release ---"
-git add Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md README.md
 git commit -m "release v${VERSION}"
 echo "  Committed"
 
