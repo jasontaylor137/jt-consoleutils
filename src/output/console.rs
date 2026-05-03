@@ -118,7 +118,9 @@ impl Output for ConsoleOutput {
       let (header, viewport_line): (String, fn(&str) -> String) = match (success, self.colors_enabled) {
          (true, true) => (format!("\x1b[32m✓\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  {l}")),
          (true, false) => (format!("✓ {label} ({t})"), |l| format!("  {l}")),
-         (false, true) => (format!("\x1b[31m✗\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  \x1b[31m{l}\x1b[0m")),
+         (false, true) => {
+            (format!("\x1b[31m✗\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  \x1b[31m{l}\x1b[0m"))
+         }
          (false, false) => (format!("✗ {label} ({t})"), |l| format!("  {l}"))
       };
       println!("{header}");

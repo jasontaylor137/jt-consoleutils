@@ -2,10 +2,10 @@
 //!
 //! When the terminal sends SIGINT to the foreground process group, both the
 //! parent CLI and any spawned child receive it. By default the parent dies
-//! before its cleanup phase runs. [`install_parent_handlers`](crate::signals::install_parent_handlers) installs a no-op
-//! handler in the parent so it survives the signal and reaches its cleanup
-//! code; the child still receives SIGINT directly from the terminal and exits
-//! on its own.
+//! before its cleanup phase runs.
+//! [`install_parent_handlers`](crate::signals::install_parent_handlers) installs a no-op handler in
+//! the parent so it survives the signal and reaches its cleanup code; the child still receives
+//! SIGINT directly from the terminal and exits on its own.
 //!
 //! On Windows the equivalent is `SetConsoleCtrlHandler(NULL, TRUE)` which tells
 //! the OS to ignore Ctrl+C events for this process. The child receives its own

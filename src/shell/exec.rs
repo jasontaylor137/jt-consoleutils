@@ -46,9 +46,8 @@ struct SpawnedCommand {
 /// - **quiet**: collect output silently
 /// - **verbose**: stream with `| label...` and `> ` prefixed lines
 /// - **default + TTY**: animated spinner overlay with scrolling viewport
-/// - **default + non-TTY**: collect silently, then emit `step_result` (the
-///   spinner has no meaningful non-interactive form, so we fall back to
-///   end-of-run reporting)
+/// - **default + non-TTY**: collect silently, then emit `step_result` (the spinner has no
+///   meaningful non-interactive form, so we fall back to end-of-run reporting)
 ///
 /// # Errors
 ///
@@ -361,8 +360,7 @@ mod tests {
    #[cfg(unix)]
    fn run_command_non_tty_reports_failure_with_step_result() {
       let mut out = StringOutput::new();
-      let result =
-         run_command("fail step", "false", &[], &mut out, OutputMode::default(), 5).expect("spawn false");
+      let result = run_command("fail step", "false", &[], &mut out, OutputMode::default(), 5).expect("spawn false");
       assert!(!result.success);
       assert!(out.log().contains("✗ fail step"), "expected failure step_result, got: {}", out.log());
    }

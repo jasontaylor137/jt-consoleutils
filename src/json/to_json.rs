@@ -144,7 +144,9 @@ impl StructSerializer {
    /// Write an optional nested object field. `None` is skipped; otherwise the
    /// closure runs with the inner value and a child serializer.
    pub fn field_opt_object<T, F>(&mut self, key: &str, value: &Option<T>, build: F)
-   where F: FnOnce(&mut StructSerializer, &T) {
+   where
+      F: FnOnce(&mut StructSerializer, &T)
+   {
       if let Some(inner) = value {
          self.field_object(key, |child| build(child, inner));
       }

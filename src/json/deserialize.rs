@@ -58,9 +58,9 @@ pub fn optional_string(
 /// Extract a required `f64` numeric field.
 pub fn require_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<f64, JsonError> {
    match map.get(key) {
-      Some(JsonValue::Number(s)) => s
-         .parse::<f64>()
-         .map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'"))),
+      Some(JsonValue::Number(s)) => {
+         s.parse::<f64>().map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'")))
+      }
       Some(other) => Err(type_err(context, key, "number", other.type_name())),
       None => Err(JsonError::value(format!("{context}.{key}: required field missing")))
    }
@@ -69,10 +69,9 @@ pub fn require_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) 
 /// Extract an optional `f64` numeric field. Missing or `null` → `None`.
 pub fn optional_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<f64>, JsonError> {
    match map.get(key) {
-      Some(JsonValue::Number(s)) => s
-         .parse::<f64>()
-         .map(Some)
-         .map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'"))),
+      Some(JsonValue::Number(s)) => {
+         s.parse::<f64>().map(Some).map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'")))
+      }
       Some(JsonValue::Null) | None => Ok(None),
       Some(other) => Err(type_err(context, key, "number", other.type_name()))
    }
@@ -164,9 +163,7 @@ pub fn optional_nested<T: FromJsonValue>(
 ) -> Result<Option<T>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Null) | None => Ok(None),
-      Some(v) => T::from_json_value(v)
-         .map(Some)
-         .map_err(|e| JsonError::value(format!("{context}.{key}: {e}")))
+      Some(v) => T::from_json_value(v).map(Some).map_err(|e| JsonError::value(format!("{context}.{key}: {e}")))
    }
 }
 
@@ -183,8 +180,7 @@ pub fn optional_map_of<T: FromJsonValue>(
       Some(JsonValue::Object(obj)) => {
          let mut out = HashMap::with_capacity(obj.len());
          for (k, v) in obj {
-            let parsed = T::from_json_value(v)
-               .map_err(|e| JsonError::value(format!("{context}.{key}.{k}: {e}")))?;
+            let parsed = T::from_json_value(v).map_err(|e| JsonError::value(format!("{context}.{key}.{k}: {e}")))?;
             out.insert(k.clone(), parsed);
          }
          Ok(Some(out))

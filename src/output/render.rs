@@ -227,6 +227,11 @@ pub trait OutputAction {
    /// Begin emitting an action line. Accepts any `impl AsVerb` (typically a
    /// project-specific `Verb` enum).
    fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_>;
+
+   /// Begin emitting a subject-less summary line — typically followed by
+   /// `.count(n, noun)` to render `✓ <Verb> <n> <nouns>`. Use when the line
+   /// describes an aggregate rather than a specific named subject.
+   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_>;
 }
 
 // Two near-identical impls: one for `dyn Output` (which doesn't satisfy
@@ -238,15 +243,28 @@ fn build_action<'a>(out: &'a mut (dyn Output + 'a), verb: &str, subject: &str) -
    ActionBuilder::new(out, verb.to_string(), subj, colors)
 }
 
+fn build_summary<'a>(out: &'a mut (dyn Output + 'a), verb: &str) -> ActionBuilder<'a> {
+   let colors = out.colors_enabled();
+   ActionBuilder::new(out, verb.to_string(), None, colors)
+}
+
 impl OutputAction for dyn Output + '_ {
    fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
       build_action(self, verb.as_verb(), subject)
+   }
+
+   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
+      build_summary(self, verb.as_verb())
    }
 }
 
 impl<T: Output> OutputAction for T {
    fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
       build_action(self, verb.as_verb(), subject)
+   }
+
+   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
+      build_summary(self, verb.as_verb())
    }
 }
 

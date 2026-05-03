@@ -86,11 +86,7 @@ impl FileStats {
       if !colors {
          return if n > 0 { format!("{n} error{}", plural(n)) } else { "0 errors".to_string() };
       }
-      if n > 0 {
-         format!("{RED}{n} error{}{RESET}", plural(n))
-      } else {
-         format!("{GREEN}0 errors{RESET}")
-      }
+      if n > 0 { format!("{RED}{n} error{}{RESET}", plural(n)) } else { format!("{GREEN}0 errors{RESET}") }
    }
 
    fn format_skipped_part(&self, colors: bool) -> String {
