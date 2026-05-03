@@ -19,7 +19,16 @@ pub enum CliError {
    Usage(String),
    /// Conflicting flags that cannot be combined.
    #[error("{0}")]
-   Conflict(String)
+   Conflict(String),
+   /// Display the carried help text as a successful response, rather than as an
+   /// error. Returned by parsers when reaching a position where printing the
+   /// matching command's help is the right answer (e.g. `myprog config` with no
+   /// subcommand). The caller is expected to detect this variant and print the
+   /// text via [`crate::cli::help::print_help`] instead of routing through the
+   /// "Error: ..." path used for [`Usage`](Self::Usage) and
+   /// [`Conflict`](Self::Conflict).
+   #[error("{0}")]
+   ShowHelp(String)
 }
 
 impl CliError {
@@ -31,6 +40,11 @@ impl CliError {
    /// Create a [`CliError::Conflict`] from anything that converts to `String`.
    pub fn conflict(msg: impl Into<String>) -> Self {
       CliError::Conflict(msg.into())
+   }
+
+   /// Create a [`CliError::ShowHelp`] from anything that converts to `String`.
+   pub fn show_help(text: impl Into<String>) -> Self {
+      CliError::ShowHelp(text.into())
    }
 }
 
