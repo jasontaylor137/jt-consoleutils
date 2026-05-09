@@ -4,7 +4,7 @@
 use super::with_prefix;
 #[cfg(feature = "trace")]
 use super::with_trace_prefix;
-use super::{Output, OutputMode, format_elapsed};
+use super::{DEFAULT_THEME, Output, OutputMode, RenderTheme, format_elapsed};
 
 /// Production [`Output`] implementation that writes to stdout.
 ///
@@ -17,23 +17,35 @@ use super::{Output, OutputMode, format_elapsed};
 /// `colors_enabled = is_terminal(stdout) && NO_COLOR is unset`.
 pub struct ConsoleOutput {
    mode: OutputMode,
-   colors_enabled: bool
+   colors_enabled: bool,
+   theme: RenderTheme
 }
 
 impl ConsoleOutput {
    /// Create a new `ConsoleOutput` driven by `mode`.
    ///
-   /// Auto-detects whether ANSI color sequences should be emitted.
+   /// Auto-detects whether ANSI color sequences should be emitted. Uses
+   /// [`DEFAULT_THEME`](crate::output::DEFAULT_THEME); call
+   /// [`with_theme`](Self::with_theme) to override.
    #[must_use]
    pub fn new(mode: OutputMode) -> Self {
       let colors_enabled = Self::detect_colors();
-      Self { mode, colors_enabled }
+      Self { mode, colors_enabled, theme: DEFAULT_THEME }
    }
 
    /// Create a `ConsoleOutput` with explicit color setting (useful for tests).
    #[must_use]
    pub const fn with_colors(mode: OutputMode, colors_enabled: bool) -> Self {
-      Self { mode, colors_enabled }
+      Self { mode, colors_enabled, theme: DEFAULT_THEME }
+   }
+
+   /// Replace the [`RenderTheme`] used to format glyphs and connector words.
+   ///
+   /// Builder-style: `ConsoleOutput::new(mode).with_theme(ASCII_THEME)`.
+   #[must_use]
+   pub const fn with_theme(mut self, theme: RenderTheme) -> Self {
+      self.theme = theme;
+      self
    }
 
    fn detect_colors() -> bool {
@@ -68,11 +80,15 @@ impl Output for ConsoleOutput {
       self.colors_enabled
    }
 
+   fn theme(&self) -> RenderTheme {
+      self.theme
+   }
+
    fn warn(&mut self, msg: &str) {
       if self.mode.is_quiet() {
          return;
       }
-      let line = super::render::render_warn(msg, self.colors_enabled);
+      let line = super::render::render_warn(msg, self.colors_enabled, &self.theme);
       eprintln!("{line}");
    }
 
@@ -115,13 +131,14 @@ impl Output for ConsoleOutput {
          return;
       }
       let t = format_elapsed(elapsed_ms);
+      let glyph = if success { self.theme.success_glyph } else { self.theme.error_glyph };
       let (header, viewport_line): (String, fn(&str) -> String) = match (success, self.colors_enabled) {
-         (true, true) => (format!("\x1b[32m✓\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  {l}")),
-         (true, false) => (format!("✓ {label} ({t})"), |l| format!("  {l}")),
+         (true, true) => (format!("\x1b[32m{glyph}\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  {l}")),
+         (true, false) => (format!("{glyph} {label} ({t})"), |l| format!("  {l}")),
          (false, true) => {
-            (format!("\x1b[31m✗\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  \x1b[31m{l}\x1b[0m"))
+            (format!("\x1b[31m{glyph}\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  \x1b[31m{l}\x1b[0m"))
          }
-         (false, false) => (format!("✗ {label} ({t})"), |l| format!("  {l}"))
+         (false, false) => (format!("{glyph} {label} ({t})"), |l| format!("  {l}"))
       };
       println!("{header}");
       if !success {

@@ -24,6 +24,7 @@ pub mod trace;
 
 pub use console::ConsoleOutput;
 pub use mode::{LogLevel, OutputMode};
+pub use render::{ASCII_THEME, DEFAULT_THEME, RenderTheme};
 pub use string::StringOutput;
 
 /// Abstraction over console output, enabling tests to capture output in memory.
@@ -58,15 +59,25 @@ pub trait Output {
       false
    }
 
+   /// Returns the [`RenderTheme`] this output renders with.
+   ///
+   /// Default: [`DEFAULT_THEME`] (Unicode glyphs, English connector words).
+   /// Override to swap glyphs (e.g. [`ASCII_THEME`] for terminals without
+   /// Unicode support) or translate `warn:`/`error:` labels and connector
+   /// words like `to`/`from`.
+   fn theme(&self) -> RenderTheme {
+      DEFAULT_THEME
+   }
+
    /// Emit a steady-state info line: `• <msg>`.
    fn state(&mut self, msg: &str) {
-      let line = render::render_state(msg, self.colors_enabled());
+      let line = render::render_state(msg, self.colors_enabled(), &self.theme());
       self.writeln(&line);
    }
 
    /// Emit a standalone hint line: `→ <msg>` (whole line dim).
    fn hint(&mut self, msg: &str) {
-      let line = render::render_hint(msg, self.colors_enabled());
+      let line = render::render_hint(msg, self.colors_enabled(), &self.theme());
       self.writeln(&line);
    }
 
@@ -84,14 +95,14 @@ pub trait Output {
 
    /// Emit a non-fatal warning to **stderr**: `⚠ warn: <msg>`.
    fn warn(&mut self, msg: &str) {
-      let line = render::render_warn(msg, self.colors_enabled());
+      let line = render::render_warn(msg, self.colors_enabled(), &self.theme());
       self.eprintln(&line);
    }
 
    /// Emit a fatal-error summary to **stderr**: `✗ error: <msg>`.
    /// **Not suppressed by `--quiet`** — errors always flow.
    fn error(&mut self, msg: &str) {
-      let line = render::render_error(msg, self.colors_enabled());
+      let line = render::render_error(msg, self.colors_enabled(), &self.theme());
       self.eprintln(&line);
    }
 

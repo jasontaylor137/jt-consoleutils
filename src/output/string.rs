@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 #[cfg(any(feature = "verbose", feature = "trace"))]
 use super::with_prefix;
-use super::{Output, format_elapsed};
+use super::{DEFAULT_THEME, Output, RenderTheme, format_elapsed};
 
 /// In-memory [`Output`] implementation for use in tests.
 ///
@@ -23,14 +23,24 @@ use super::{Output, format_elapsed};
 /// ```
 pub struct StringOutput {
    buf: String,
-   err_buf: String
+   err_buf: String,
+   theme: RenderTheme
 }
 
 impl StringOutput {
-   /// Create a new, empty `StringOutput`.
+   /// Create a new, empty `StringOutput` using [`DEFAULT_THEME`](crate::output::DEFAULT_THEME).
    #[must_use]
    pub const fn new() -> Self {
-      Self { buf: String::new(), err_buf: String::new() }
+      Self { buf: String::new(), err_buf: String::new(), theme: DEFAULT_THEME }
+   }
+
+   /// Replace the [`RenderTheme`] used to format glyphs and connector words.
+   ///
+   /// Builder-style: `StringOutput::new().with_theme(ASCII_THEME)`.
+   #[must_use]
+   pub const fn with_theme(mut self, theme: RenderTheme) -> Self {
+      self.theme = theme;
+      self
    }
 
    /// Return the full captured stdout output as a string slice.
@@ -67,6 +77,10 @@ impl Output for StringOutput {
       self.err_buf.push('\n');
    }
 
+   fn theme(&self) -> RenderTheme {
+      self.theme
+   }
+
    #[cfg(feature = "verbose")]
    fn is_verbose(&self) -> bool {
       true
@@ -98,7 +112,7 @@ impl Output for StringOutput {
    }
 
    fn step_result(&mut self, label: &str, success: bool, elapsed_ms: u128, _viewport: &[String]) {
-      let symbol = if success { '✓' } else { '✗' };
+      let symbol = if success { self.theme.success_glyph } else { self.theme.error_glyph };
       let _ = writeln!(self.buf, "{symbol} {label} ({})", format_elapsed(elapsed_ms));
    }
 
@@ -331,5 +345,63 @@ mod tests {
       out.error("could not find script 'deploy'");
       assert_eq!(out.log(), "");
       assert_eq!(out.err_log(), "\u{2717} error: could not find script 'deploy'\n");
+   }
+
+   #[test]
+   fn ascii_theme_drives_action_state_warn_error_through_string_output() {
+      // Given
+      let mut out = StringOutput::new().with_theme(crate::output::ASCII_THEME);
+
+      // When
+      out.action("Edited", "deploy.ts").to("auth.ts");
+      out.state("ready");
+      out.hint("retry");
+      out.warn("careful");
+      out.error("nope");
+
+      // Then
+      assert_eq!(out.log(), "+ Edited deploy.ts to auth.ts\n* ready\n> retry\n");
+      assert_eq!(out.err_log(), "! warn: careful\nx error: nope\n");
+   }
+
+   #[test]
+   fn custom_theme_translates_connector_words_through_string_output() {
+      // Given
+      const FRENCH: crate::output::RenderTheme = crate::output::RenderTheme {
+         success_glyph: "\u{2713}",
+         state_glyph: "\u{2022}",
+         hint_glyph: "\u{2192}",
+         warn_glyph: "\u{26A0}",
+         error_glyph: "\u{2717}",
+         arrow: "\u{2192}",
+         em_dash: "\u{2014}",
+         warn_label: "attention :",
+         error_label: "erreur :",
+         prep_to: "vers",
+         prep_from: "depuis"
+      };
+      let mut out = StringOutput::new().with_theme(FRENCH);
+
+      // When
+      out.action("Ajouté", "lodash").to("deploy.ts");
+      out.action("Retiré", "lodash").from("deploy.ts");
+      out.warn("clé inconnue");
+
+      // Then
+      assert_eq!(out.log(), "✓ Ajouté lodash vers deploy.ts\n✓ Retiré lodash depuis deploy.ts\n");
+      assert_eq!(out.err_log(), "⚠ attention : clé inconnue\n");
+   }
+
+   #[test]
+   fn step_result_uses_theme_glyphs() {
+      // Given
+      let mut out = StringOutput::new().with_theme(crate::output::ASCII_THEME);
+
+      // When
+      out.step_result("build", true, 1200, &[]);
+      out.step_result("test", false, 300, &[]);
+
+      // Then
+      assert_eq!(out.log(), "+ build (1s)\nx test (300ms)\n");
    }
 }
