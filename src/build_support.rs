@@ -60,12 +60,10 @@ pub fn emit_build_info() {
 /// (which correctly resolves worktrees and `gitdir:` redirection files):
 ///
 /// - `HEAD` — changes on `git checkout <branch>` and on detached-HEAD moves.
-/// - The branch ref file (e.g. `refs/heads/main`) — changes on `git commit`
-///   when a branch is checked out. Skipped on detached HEAD where there's no
-///   ref to watch.
-/// - `packed-refs` — covers freshly cloned / GC'd repos where refs have been
-///   packed into a single file and the per-branch loose-ref file doesn't
-///   exist yet.
+/// - The branch ref file (e.g. `refs/heads/main`) — changes on `git commit` when a branch is
+///   checked out. Skipped on detached HEAD where there's no ref to watch.
+/// - `packed-refs` — covers freshly cloned / GC'd repos where refs have been packed into a single
+///   file and the per-branch loose-ref file doesn't exist yet.
 ///
 /// Failures (not a git repo, git not installed, unreadable HEAD) silently
 /// no-op — same fallback policy as `compute_git_hash`.
