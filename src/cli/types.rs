@@ -12,6 +12,12 @@ pub struct ParsedCli<C> {
 }
 
 /// Errors that can occur during CLI argument parsing.
+///
+/// Note that two variants — [`ShowHelp`](Self::ShowHelp) and
+/// [`ShowVersion`](Self::ShowVersion) — are not actually errors. They signal
+/// that the user requested help or version output and the application should
+/// print the carried text and exit with status `0`. The framework never calls
+/// [`std::process::exit`] itself; the application owns its exit codes.
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
    /// Invalid usage: missing required arg, unknown subcommand, etc.
@@ -21,14 +27,20 @@ pub enum CliError {
    #[error("{0}")]
    Conflict(String),
    /// Display the carried help text as a successful response, rather than as an
-   /// error. Returned by parsers when reaching a position where printing the
-   /// matching command's help is the right answer (e.g. `myprog config` with no
-   /// subcommand). The caller is expected to detect this variant and print the
-   /// text via [`crate::cli::help::print_help`] instead of routing through the
-   /// "Error: ..." path used for [`Usage`](Self::Usage) and
-   /// [`Conflict`](Self::Conflict).
+   /// error. Returned by the framework on `--help`/`-h`/`help` and by parsers
+   /// when reaching a position where printing the matching command's help is
+   /// the right answer (e.g. `myprog config` with no subcommand). The caller
+   /// is expected to detect this variant and print the text via
+   /// [`crate::cli::help::print_help`] (then typically `exit(0)`) instead of
+   /// routing through the "Error: ..." path used for [`Usage`](Self::Usage)
+   /// and [`Conflict`](Self::Conflict).
    #[error("{0}")]
-   ShowHelp(String)
+   ShowHelp(String),
+   /// Display the carried version string and exit successfully. Returned by
+   /// the framework when `--version` is detected. Caller typically prints via
+   /// [`crate::cli::help::print_version`] and then `exit(0)`.
+   #[error("{0}")]
+   ShowVersion(String)
 }
 
 impl CliError {
@@ -46,6 +58,11 @@ impl CliError {
    pub fn show_help(text: impl Into<String>) -> Self {
       CliError::ShowHelp(text.into())
    }
+
+   /// Create a [`CliError::ShowVersion`] from anything that converts to `String`.
+   pub fn show_version(text: impl Into<String>) -> Self {
+      CliError::ShowVersion(text.into())
+   }
 }
 
 /// Trait that apps implement on their `Command` enum to participate in
@@ -54,6 +71,14 @@ impl CliError {
 /// The framework handles global flags (`-v`, `-q`, `-d`, `-t`), `--version`,
 /// `--help`/`help`, and subcommand name matching. Apps provide subcommand
 /// names, parsing logic, help text, and version string.
+///
+/// # Exit codes
+///
+/// The framework never calls [`std::process::exit`]. Help and version
+/// requests are surfaced as [`CliError::ShowHelp`] / [`CliError::ShowVersion`]
+/// so the application can decide how (and whether) to terminate the process.
+/// This makes the parser embeddable in TUIs, tests, and tools that wrap
+/// other CLIs.
 pub trait CommandParser: Sized {
    /// List of recognized subcommand names.
    ///

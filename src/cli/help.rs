@@ -1,11 +1,14 @@
 //! Help and version printing helpers for CLI tools.
 //!
-//! Provides two diverging functions that print to stdout and exit:
-//! - `print_help(text: &str) -> !` — colorize and print a help string, then exit 0
-//! - `print_version(version_str: &str) -> !` — print a version string, then exit 0
+//! Provides two functions that print to stdout (without exiting):
+//! - `print_help(text: &str)` — word-wrap, colorize, and print a help string
+//! - `print_version(version_str: &str)` — print a version string
 //!
-//! Both functions are intended to be called from argument parsing code when
-//! `-h`/`--help` or `--version` flags are detected.
+//! Both are intended to be called from `main()` when handling
+//! [`CliError::ShowHelp`](crate::cli::CliError::ShowHelp) or
+//! [`CliError::ShowVersion`](crate::cli::CliError::ShowVersion) returned by
+//! [`parse_cli`](crate::cli::parse_cli). The application is responsible for
+//! calling [`std::process::exit`] (typically with status `0`) afterwards.
 
 use crate::terminal::{colorize::colorize_text_with_width, terminal_width};
 
@@ -57,43 +60,40 @@ pub fn wrap_help_text(text: &str, width: usize) -> String {
 }
 
 /// Colorize `text` with a left-to-right rainbow spanning the current terminal
-/// width, print it to stdout, and exit with code 0.
+/// width and print it to stdout.
 ///
 /// Lines longer than the terminal width are word-wrapped before colorizing,
-/// preserving leading indentation.
-///
-/// This is the standard help-printing pattern shared by CLI tools in this
-/// ecosystem. Call it when `-h` or `--help` is detected.
+/// preserving leading indentation. This function does **not** call
+/// [`std::process::exit`] — callers handling
+/// [`CliError::ShowHelp`](crate::cli::CliError::ShowHelp) typically exit
+/// with status `0` afterwards.
 ///
 /// # Example
 ///
 /// ```rust,ignore
-/// if args.iter().any(|a| a == "-h" || a == "--help") {
-///     jt_consoleutils::cli::help::print_help(&build_help_text());
+/// match parse_cli::<Cmd>() {
+///     Ok(parsed) => run(parsed),
+///     Err(CliError::ShowHelp(text)) => {
+///         jt_consoleutils::cli::help::print_help(&text);
+///         std::process::exit(0);
+///     }
+///     Err(e) => { eprintln!("Error: {e}"); std::process::exit(1); }
 /// }
 /// ```
-pub fn print_help(text: &str) -> ! {
+pub fn print_help(text: &str) {
    let width = terminal_width();
    let wrapped = wrap_help_text(text, width);
    println!("{}", colorize_text_with_width(&wrapped, Some(width)));
-   std::process::exit(0);
 }
 
-/// Print `version_str` to stdout and exit with code 0.
+/// Print `version_str` to stdout.
 ///
-/// Call this when `--version` is detected. `version_str` is typically produced
-/// by `jt_consoleutils::cli::version::version_string(BUILD_DATE, GIT_HASH)`.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// if raw.version {
-///     jt_consoleutils::cli::help::print_version(&version::version_string());
-/// }
-/// ```
-pub fn print_version(version_str: &str) -> ! {
+/// Intended for handling [`CliError::ShowVersion`](crate::cli::CliError::ShowVersion).
+/// `version_str` is typically produced by
+/// [`crate::cli::version::version_string`]. This function does **not** call
+/// [`std::process::exit`] — the caller decides what to do next.
+pub fn print_version(version_str: &str) {
    println!("{version_str}");
-   std::process::exit(0);
 }
 
 #[cfg(test)]

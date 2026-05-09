@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] — 2026-05-09
+
+### Changed
+
+- **BREAKING:** `cli::parse_cli` / `parse_cli_from` no longer call `std::process::exit`. Help and version requests now surface as `CliError::ShowHelp` and the new `CliError::ShowVersion` variant; the application owns its exit codes. This makes the parser embeddable in TUIs, tests, and tools that wrap other CLIs.
+- **BREAKING:** `cli::help::print_help` and `cli::help::print_version` no longer return `!`. They print to stdout and return `()`; callers decide whether (and how) to exit afterwards.
+
+### Added
+
+- `CliError::ShowVersion(String)` variant + `CliError::show_version` constructor.
+
+### Migration
+
+```rust
+// Before (jt-consoleutils 0.4.x): parse_cli would exit on --help/--version.
+let cli = parse_cli::<Cmd>()?;
+
+// After (0.5.0): handle ShowHelp / ShowVersion explicitly.
+let cli = match parse_cli::<Cmd>() {
+    Ok(cli) => cli,
+    Err(CliError::ShowHelp(text)) => { print_help(&text); std::process::exit(0); }
+    Err(CliError::ShowVersion(text)) => { print_version(&text); std::process::exit(0); }
+    Err(e) => { eprintln!("Error: {e}"); std::process::exit(1); }
+};
+```
+
+---
+
 ## [0.4.0] — 2026-05-03
 
 ### Added

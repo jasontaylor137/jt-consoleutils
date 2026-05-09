@@ -11,14 +11,16 @@ use crate::output::{LogLevel, OutputMode};
 ///
 /// # Errors
 ///
-/// Returns [`CliError::Conflict`] for mutually exclusive flags (`-v` + `-q`,
-/// `-q` + `-d`) and [`CliError::Usage`] for unknown subcommands when
-/// [`CommandParser::default_command`] returns `None`.
+/// - [`CliError::ShowHelp`] when help output was requested (no args, `-h`, `--help`, or `help
+///   [<cmd>]`). The caller should print the carried text via [`crate::cli::help::print_help`] and
+///   exit with status `0`.
+/// - [`CliError::ShowVersion`] when `--version` was passed. Print and exit `0`.
+/// - [`CliError::Conflict`] for mutually exclusive flags (`-v` + `-q`, `-q` + `-d`).
+/// - [`CliError::Usage`] for unknown subcommands when [`CommandParser::default_command`] returns
+///   `None`, or for any error surfaced by the app's parser.
 ///
-/// # Exits
-///
-/// Calls `std::process::exit(0)` for `--help` and `--version` (these are
-/// terminal actions that print and exit, matching standard CLI conventions).
+/// This function never calls [`std::process::exit`] — the application is
+/// responsible for choosing exit codes for each variant.
 pub fn parse_cli<C: CommandParser>() -> Result<ParsedCli<C>, CliError> {
    let args: Vec<String> = std::env::args().collect();
    parse_cli_inner::<C>(&args)
@@ -46,10 +48,10 @@ pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<ParsedCli<C>,
 /// argv including the program name at index 0.
 fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, CliError> {
    if args.len() <= 1 {
-      crate::cli::help::print_help(&C::help_text());
+      return Err(CliError::ShowHelp(C::help_text()));
    }
 
-   handle_help::<C>(args);
+   handle_help::<C>(args)?;
 
    let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(args);
 
@@ -61,7 +63,7 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, Cl
    }
 
    if filtered.iter().any(|a| a == "--version") {
-      crate::cli::help::print_version(&C::version());
+      return Err(CliError::ShowVersion(C::version()));
    }
 
    let level = flags_to_level(trace, verbose, quiet);
@@ -71,23 +73,24 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, Cl
    Ok(ParsedCli { mode, command })
 }
 
-/// Scan args for help triggers. Calls `process::exit(0)` via print_help if help is printed.
-fn handle_help<C: CommandParser>(args: &[String]) {
+/// Scan args for help triggers. Returns `Err(CliError::ShowHelp(...))` when a
+/// help request is detected, otherwise `Ok(())`.
+fn handle_help<C: CommandParser>(args: &[String]) -> Result<(), CliError> {
    // `help` as first arg
    if args[1] == "help" {
       let cmd = args.get(2).map(|s| s.as_str());
-      match cmd {
+      return Err(match cmd {
          Some(name) => {
             // Pass remaining args after the command name (e.g. `help config show` → args=["show"])
             let rest: Vec<String> = args[3..].to_vec();
-            if let Some(text) = C::command_help(name, &rest) {
-               crate::cli::help::print_help(&text);
+            match C::command_help(name, &rest) {
+               Some(text) => CliError::ShowHelp(text),
+               // Unknown subcommand after help — show main help
+               None => CliError::ShowHelp(C::help_text())
             }
-            // Unknown subcommand after help — print main help
-            crate::cli::help::print_help(&C::help_text());
          }
-         None => crate::cli::help::print_help(&C::help_text())
-      }
+         None => CliError::ShowHelp(C::help_text())
+      });
    }
 
    // -h / --help anywhere in args
@@ -96,10 +99,12 @@ fn handle_help<C: CommandParser>(args: &[String]) {
       if let Some(cmd) = args.iter().skip(1).find(|a| C::subcommands().contains(&a.as_str()))
          && let Some(text) = C::command_help(cmd, &[])
       {
-         crate::cli::help::print_help(&text);
+         return Err(CliError::ShowHelp(text));
       }
-      crate::cli::help::print_help(&C::help_text());
+      return Err(CliError::ShowHelp(C::help_text()));
    }
+
+   Ok(())
 }
 
 /// Extract global flags from args (skipping program name at index 0).
@@ -156,7 +161,7 @@ pub(super) fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLeve
 pub(super) fn dispatch<C: CommandParser>(filtered: &[String]) -> Result<C, CliError> {
    let (first, rest) = match filtered.split_first() {
       Some((f, r)) => (f.as_str(), r),
-      None => crate::cli::help::print_help(&C::help_text())
+      None => return Err(CliError::ShowHelp(C::help_text()))
    };
 
    // Check for recognized subcommand
