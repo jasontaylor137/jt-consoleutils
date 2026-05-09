@@ -274,30 +274,33 @@ fn spawn_line_readers(stdout: ChildStdout, stderr: ChildStderr, tx: mpsc::Sender
 
    let stdout_reader = thread::spawn(move || {
       use std::io::Read;
-      let mut buf = String::new();
-      #[allow(clippy::collection_is_never_read)]
-      let mut raw = String::new();
+      let mut buf: Vec<u8> = Vec::new();
+      let mut chunk = [0u8; 1024];
       let mut reader = io::BufReader::new(stdout);
-      let mut byte = [0u8; 1];
-      while reader.read(&mut byte).unwrap_or(0) > 0 {
-         let ch = byte[0] as char;
-         if ch == '\n' {
-            let line = std::mem::take(&mut buf);
-            // Drain any \r-terminated segment that was pending in raw
-            raw.clear();
-            let _ = tx.send(Line::Stdout(line));
-         } else if ch == '\r' {
-            let segment = std::mem::take(&mut buf);
-            raw.clear();
-            let _ = tx.send(Line::StdoutCr(segment));
-         } else {
-            buf.push(ch);
-            raw.push(ch);
+      loop {
+         let n = match reader.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n
+         };
+         for &b in &chunk[..n] {
+            match b {
+               b'\n' => {
+                  let line = String::from_utf8_lossy(&buf).into_owned();
+                  buf.clear();
+                  let _ = tx.send(Line::Stdout(line));
+               }
+               b'\r' => {
+                  let segment = String::from_utf8_lossy(&buf).into_owned();
+                  buf.clear();
+                  let _ = tx.send(Line::StdoutCr(segment));
+               }
+               _ => buf.push(b)
+            }
          }
       }
       // Flush any remaining text without a terminator.
       if !buf.is_empty() {
-         let _ = tx.send(Line::Stdout(buf));
+         let _ = tx.send(Line::Stdout(String::from_utf8_lossy(&buf).into_owned()));
       }
    });
 
@@ -363,5 +366,27 @@ mod tests {
       let result = run_command("fail step", "false", &[], &mut out, OutputMode::default(), 5).expect("spawn false");
       assert!(!result.success);
       assert!(out.log().contains("✗ fail step"), "expected failure step_result, got: {}", out.log());
+   }
+
+   /// Regression: the stdout reader used to read one byte at a time and cast
+   /// `byte as char`, which decoded UTF-8 bytes ≥ 0x80 as Latin-1 and silently
+   /// mangled any non-ASCII subprocess output.
+   #[test]
+   #[cfg(unix)]
+   fn stdout_reader_preserves_non_ascii_bytes() {
+      let SpawnedCommand { mut child, lines, readers } =
+         spawn_command_with_lines("printf", &["café\nnaïve\r"]).expect("spawn printf");
+      let mut texts: Vec<String> = Vec::new();
+      for line in lines {
+         texts.push(match line {
+            Line::Stdout(s) | Line::StdoutCr(s) | Line::Stderr(s) => s
+         });
+      }
+      child.wait().expect("wait printf");
+      for r in readers {
+         r.join().expect("join reader");
+      }
+      assert!(texts.iter().any(|t| t == "café"), "expected café line, got: {texts:?}");
+      assert!(texts.iter().any(|t| t == "naïve"), "expected naïve segment, got: {texts:?}");
    }
 }
