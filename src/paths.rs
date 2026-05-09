@@ -4,7 +4,7 @@
 
 use std::{
    env,
-   path::{Component, Path, PathBuf, absolute}
+   path::{Component, Path, PathBuf}
 };
 
 /// Return the user's home directory, or `None` if the relevant environment
@@ -97,7 +97,8 @@ pub fn strip_extension(filename: &str) -> String {
 /// Check whether `dir` is present in the process `PATH` environment variable.
 ///
 /// Both sides are canonicalized before comparison so symlinks and `..`
-/// segments don't cause false negatives. On Windows the comparison is
+/// segments don't cause false negatives. Paths that don't exist on disk fall
+/// back to lexical absolute-path normalization. On Windows the comparison is
 /// case-insensitive.
 #[must_use]
 pub fn is_dir_on_path(dir: &Path) -> bool {
@@ -110,20 +111,32 @@ pub fn is_dir_on_path(dir: &Path) -> bool {
 /// Check whether `dir` is present in the given `PATH` string.
 ///
 /// Separated from [`is_dir_on_path`] so tests can pass an explicit `PATH`
-/// value without mutating the process environment.
+/// value without mutating the process environment. See [`is_dir_on_path`]
+/// for canonicalization semantics.
 #[must_use]
 pub fn is_dir_in_path_var(dir: &Path, path_var: &str) -> bool {
-   let abs_dir = absolute(dir).unwrap_or_else(|_| dir.to_path_buf());
+   let canon_dir = canonicalize_for_path_compare(dir);
    for entry in env::split_paths(path_var) {
       if entry.as_os_str().is_empty() {
          continue;
       }
-      let abs_entry = absolute(&entry).unwrap_or(entry);
-      if paths_equal(&abs_dir, &abs_entry) {
+      let canon_entry = canonicalize_for_path_compare(&entry);
+      if paths_equal(&canon_dir, &canon_entry) {
          return true;
       }
    }
    false
+}
+
+/// Resolve `path` for PATH-membership comparison: prefer real-path
+/// canonicalization (resolves symlinks) so two PATH entries pointing at the
+/// same physical directory compare equal. Fall back to lexical absolute-path
+/// normalization for paths that don't exist on disk.
+fn canonicalize_for_path_compare(path: &Path) -> PathBuf {
+   if let Ok(canon) = std::fs::canonicalize(path) {
+      return strip_unc_prefix(canon);
+   }
+   std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(windows)]
@@ -187,6 +200,24 @@ mod tests {
 
       // Then
       assert!(result);
+   }
+
+   #[test]
+   #[cfg(unix)]
+   fn is_dir_in_path_var_resolves_symlinks() {
+      // Given — a real directory and a symlink pointing at it; PATH contains
+      // only the symlink, but we query for the real dir.
+      let real = TempDir::new().unwrap();
+      let link_parent = TempDir::new().unwrap();
+      let link = link_parent.path().join("link");
+      std::os::unix::fs::symlink(real.path(), &link).unwrap();
+      let path_var = link.to_string_lossy().into_owned();
+
+      // When
+      let result = is_dir_in_path_var(real.path(), &path_var);
+
+      // Then — canonicalization resolves the symlink, so they compare equal.
+      assert!(result, "expected symlinked PATH entry to match its real-path target");
    }
 
    #[test]
