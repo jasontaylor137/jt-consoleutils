@@ -6,6 +6,102 @@ fn term_width() -> usize {
    super::terminal_width()
 }
 
+/// Animated spinner with a scrolling viewport, drawn directly to stdout.
+///
+/// Each call to [`Spinner::tick`] erases the previous frame, advances the spinner
+/// glyph, and redraws a header (`spinner-glyph label...`) followed by the last
+/// `viewport_size` lines pushed via [`Spinner::push_line`] /
+/// [`Spinner::replace_last_line`]. Lines wider than the terminal are truncated;
+/// embedded `\n` characters expand into multiple visual rows.
+///
+/// The spinner is drawn to the locked stdout — callers should avoid writing to
+/// stdout from other code paths between [`Spinner::tick`] calls or the rendered
+/// frame will be corrupted. Call [`Spinner::clear`] when done to erase the frame
+/// before printing a final summary line.
+///
+/// ```no_run
+/// use std::{thread, time::Duration};
+///
+/// use jt_consoleutils::terminal::overlay::Spinner;
+///
+/// let mut s = Spinner::new("downloading", 5);
+/// for i in 0..20 {
+///    s.push_line(format!("chunk {i} of 20"));
+///    s.tick();
+///    thread::sleep(Duration::from_millis(80));
+/// }
+/// s.clear();
+/// println!("done");
+/// ```
+pub struct Spinner {
+   label: String,
+   viewport: Vec<String>,
+   viewport_size: usize,
+   frame: usize,
+   last_rows: usize
+}
+
+impl Spinner {
+   /// Create a new spinner with the given header `label` and a viewport that
+   /// shows the most recent `viewport_size` lines. A `viewport_size` of `0`
+   /// renders only the header row.
+   #[must_use]
+   pub fn new(label: impl Into<String>, viewport_size: usize) -> Self {
+      Self { label: label.into(), viewport: Vec::new(), viewport_size, frame: 0, last_rows: 0 }
+   }
+
+   /// Replace the header label shown next to the spinner glyph. Takes effect on
+   /// the next [`Self::tick`] / [`Self::render`] call.
+   pub fn set_label(&mut self, label: impl Into<String>) {
+      self.label = label.into();
+   }
+
+   /// Append a new line to the viewport.
+   pub fn push_line(&mut self, line: impl Into<String>) {
+      self.viewport.push(line.into());
+   }
+
+   /// Overwrite the most recently pushed viewport line in place — the
+   /// equivalent of `\r` on a TTY. If the viewport is empty this pushes the
+   /// line instead.
+   pub fn replace_last_line(&mut self, line: impl Into<String>) {
+      let line = line.into();
+      if let Some(last) = self.viewport.last_mut() {
+         *last = line;
+      } else {
+         self.viewport.push(line);
+      }
+   }
+
+   /// Advance the spinner glyph by one frame and redraw.
+   pub fn tick(&mut self) {
+      self.frame = self.frame.wrapping_add(1);
+      self.draw();
+   }
+
+   /// Redraw without advancing the spinner glyph. Useful after a label or
+   /// viewport change when no animation tick is desired.
+   pub fn render(&mut self) {
+      self.draw();
+   }
+
+   /// Erase the current frame from the terminal. The spinner can be used again
+   /// after this — the frame counter is preserved so animation continues from
+   /// where it left off.
+   pub fn clear(&mut self) {
+      let stdout = io::stdout();
+      let mut out = stdout.lock();
+      clear_lines(&mut out, self.last_rows);
+      self.last_rows = 0;
+   }
+
+   fn draw(&mut self) {
+      let stdout = io::stdout();
+      let mut out = stdout.lock();
+      self.last_rows = render_frame(&mut out, &self.label, &self.viewport, self.frame, self.last_rows, self.viewport_size);
+   }
+}
+
 /// Move cursor up `n` lines and clear each line with `\r\x1b[K`, returning cursor to the top.
 pub(crate) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
    if n == 0 {
@@ -109,7 +205,46 @@ fn truncate_visible(s: &str, max_visible: usize) -> String {
 mod tests {
    use rstest::rstest;
 
-   use super::truncate_visible;
+   use super::{Spinner, truncate_visible};
+
+   // -----------------------------------------------------------------------
+   // Spinner state transitions (rendering itself is not exercised — that
+   // writes to stdout and depends on a TTY)
+   // -----------------------------------------------------------------------
+
+   #[test]
+   fn push_line_appends_to_viewport() {
+      let mut s = Spinner::new("label", 5);
+      s.push_line("first");
+      s.push_line("second");
+      assert_eq!(s.viewport, vec!["first".to_string(), "second".to_string()]);
+   }
+
+   #[test]
+   fn replace_last_line_overwrites_when_viewport_nonempty() {
+      let mut s = Spinner::new("label", 5);
+      s.push_line("first");
+      s.replace_last_line("second");
+      assert_eq!(s.viewport, vec!["second".to_string()]);
+   }
+
+   #[test]
+   fn replace_last_line_pushes_when_viewport_empty() {
+      let mut s = Spinner::new("label", 5);
+      s.replace_last_line("only");
+      assert_eq!(s.viewport, vec!["only".to_string()]);
+   }
+
+   #[test]
+   fn set_label_replaces_label() {
+      let mut s = Spinner::new("before", 5);
+      s.set_label("after");
+      assert_eq!(s.label, "after");
+   }
+
+   // -----------------------------------------------------------------------
+   // truncate_visible
+   // -----------------------------------------------------------------------
 
    // -----------------------------------------------------------------------
    // Plain text (no ANSI)

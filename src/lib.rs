@@ -11,7 +11,7 @@
 //! |---|---|
 //! | [`output`] | [`output::Output`] trait, [`output::ConsoleOutput`], [`output::StringOutput`], [`output::OutputMode`] |
 //! | [`shell`] | [`shell::Shell`] trait, [`shell::ProcessShell`], [`shell::DryRunShell`], [`shell::MockShell`] |
-//! | [`terminal`] | ANSI colors, rainbow colorizer, terminal width detection |
+//! | [`terminal`] | ANSI colors, rainbow colorizer, terminal width, [`terminal::overlay::Spinner`] |
 //! | [`cli`] | CLI parsing framework: global flags, subcommand dispatch, help/version printing |
 //! | [`json`] | Lightweight JSON/JSONC parser, serializer, and value type |
 //! | [`fs_utils`] | Filesystem comparison, permission helpers, JSON file I/O |

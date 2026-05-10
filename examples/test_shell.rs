@@ -15,7 +15,10 @@ use jt_consoleutils::{
       Shell,
       scripted::{OverlayScriptedShell, Script}
    },
-   terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW}
+   terminal::{
+      colorize::hsv_to_rgb,
+      colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW}
+   }
 };
 
 // ---------------------------------------------------------------------------
@@ -56,30 +59,11 @@ fn frame(rows: &[(&str, usize, usize, &str, &str)]) -> String {
 /// Colorize `text` with a rainbow whose hue starts at `hue_offset_deg` and
 /// spans `width` columns.  Uses 24-bit ANSI foreground escapes.
 fn rainbow(text: &str, hue_offset_deg: f32, width: usize) -> String {
-   let hsv = |h_deg: f32| -> (u8, u8, u8) {
-      let h = ((h_deg % 360.0) + 360.0) % 360.0;
-      let (s, v) = (0.85_f32, 1.0_f32);
-      let c = v * s;
-      let h_prime = h / 60.0;
-      let x = c * (1.0 - ((h_prime % 2.0) - 1.0).abs());
-      let (r1, g1, b1) = match h_prime as u32 {
-         0 => (c, x, 0.0),
-         1 => (x, c, 0.0),
-         2 => (0.0, c, x),
-         3 => (0.0, x, c),
-         4 => (x, 0.0, c),
-         _ => (c, 0.0, x)
-      };
-      let m = v - c;
-      let to_u8 = |f: f32| ((f + m) * 255.0).round().clamp(0.0, 255.0) as u8;
-      (to_u8(r1), to_u8(g1), to_u8(b1))
-   };
-
    let w = width.max(1);
    let mut out = String::new();
    for (col, ch) in text.chars().enumerate() {
       let t = (col % w) as f32 / w as f32;
-      let (r, g, b) = hsv(hue_offset_deg + t * 360.0);
+      let (r, g, b) = hsv_to_rgb(hue_offset_deg + t * 360.0, 0.85, 1.0);
       out.push_str(&format!("\x1b[38;2;{r};{g};{b}m{ch}"));
    }
    out.push_str(RESET);

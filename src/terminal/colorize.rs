@@ -11,9 +11,13 @@ use std::fmt::Write as _;
 
 use super::colors::RESET;
 
-/// Convert HSV (h in degrees 0..360, s and v in 0..1) to RGB bytes (0..255).
+/// Convert HSV to RGB. Hue is in degrees (any real value — wrapped into
+/// `[0, 360)`); saturation and value are in `[0, 1]`. Returns RGB bytes in
+/// `[0, 255]`. Useful for emitting 24-bit ANSI foreground escapes
+/// (`\x1b[38;2;R;G;Bm`) — see [`colorize_text_with_width`] for an example.
+#[must_use]
 #[allow(clippy::many_single_char_names, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn hsv_to_rgb(h_deg: f32, s: f32, v: f32) -> (u8, u8, u8) {
+pub fn hsv_to_rgb(h_deg: f32, s: f32, v: f32) -> (u8, u8, u8) {
    let h_prime = h_deg.rem_euclid(360.0) / 60.0;
    let c = v * s;
    let x = c * (1.0 - (h_prime.rem_euclid(2.0) - 1.0).abs());
