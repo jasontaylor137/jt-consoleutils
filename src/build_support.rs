@@ -91,7 +91,10 @@ fn emit_git_rerun_directives() {
 
 fn compute_build_date() -> String {
    let now = SystemTime::now();
-   let days_since_epoch = now.duration_since(UNIX_EPOCH).unwrap().as_secs() / 86400;
+   let Ok(since_epoch) = now.duration_since(UNIX_EPOCH) else {
+      return "unknown".to_string();
+   };
+   let days_since_epoch = since_epoch.as_secs() / 86400;
 
    let mut y = 1970u64;
    let mut days_left = days_since_epoch;
