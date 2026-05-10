@@ -88,7 +88,7 @@ fn sv(v: &[&str]) -> Vec<String> {
 #[test]
 fn extract_global_flags_no_flags() {
    // Given
-   let args = sv(&["app", "list"]);
+   let args = sv(&["list"]);
 
    // When
    let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
@@ -104,7 +104,7 @@ fn extract_global_flags_no_flags() {
 #[test]
 fn extract_global_flags_quiet_short() {
    // Given
-   let args = sv(&["app", "-q", "list"]);
+   let args = sv(&["-q", "list"]);
 
    // When
    let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
@@ -120,7 +120,7 @@ fn extract_global_flags_quiet_short() {
 #[test]
 fn extract_global_flags_quiet_long() {
    // Given
-   let args = sv(&["app", "--quiet", "list"]);
+   let args = sv(&["--quiet", "list"]);
 
    // When
    let (_trace, _verbose, quiet, _dry_run, filtered) = extract_global_flags(&args);
@@ -133,7 +133,7 @@ fn extract_global_flags_quiet_long() {
 #[test]
 fn extract_global_flags_dry_run_short() {
    // Given
-   let args = sv(&["app", "-d", "list"]);
+   let args = sv(&["-d", "list"]);
 
    // When
    let (_trace, _verbose, _quiet, dry_run, filtered) = extract_global_flags(&args);
@@ -146,7 +146,7 @@ fn extract_global_flags_dry_run_short() {
 #[test]
 fn extract_global_flags_dry_run_long() {
    // Given
-   let args = sv(&["app", "--dry-run", "list"]);
+   let args = sv(&["--dry-run", "list"]);
 
    // When
    let (_trace, _verbose, _quiet, dry_run, filtered) = extract_global_flags(&args);
@@ -160,7 +160,7 @@ fn extract_global_flags_dry_run_long() {
 #[test]
 fn extract_global_flags_verbose_short() {
    // Given
-   let args = sv(&["app", "-v", "list"]);
+   let args = sv(&["-v", "list"]);
 
    // When
    let (_trace, verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
@@ -174,7 +174,7 @@ fn extract_global_flags_verbose_short() {
 #[test]
 fn extract_global_flags_verbose_long() {
    // Given
-   let args = sv(&["app", "--verbose", "list"]);
+   let args = sv(&["--verbose", "list"]);
 
    // When
    let (_trace, verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
@@ -188,7 +188,7 @@ fn extract_global_flags_verbose_long() {
 #[test]
 fn extract_global_flags_trace_short() {
    // Given
-   let args = sv(&["app", "-t", "list"]);
+   let args = sv(&["-t", "list"]);
 
    // When
    let (trace, _verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
@@ -202,7 +202,7 @@ fn extract_global_flags_trace_short() {
 #[test]
 fn extract_global_flags_trace_long() {
    // Given
-   let args = sv(&["app", "--trace", "list"]);
+   let args = sv(&["--trace", "list"]);
 
    // When
    let (trace, _verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
@@ -215,7 +215,7 @@ fn extract_global_flags_trace_long() {
 #[test]
 fn extract_global_flags_separator_preserves_flags_after() {
    // Given
-   let args = sv(&["app", "--", "-q", "extra"]);
+   let args = sv(&["--", "-q", "extra"]);
 
    // When
    let (_trace, _verbose, quiet, _dry_run, filtered) = extract_global_flags(&args);
@@ -228,7 +228,7 @@ fn extract_global_flags_separator_preserves_flags_after() {
 #[test]
 fn extract_global_flags_empty_args() {
    // Given
-   let args = sv(&["app"]);
+   let args: Vec<String> = sv(&[]);
 
    // When
    let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
@@ -245,7 +245,7 @@ fn extract_global_flags_empty_args() {
 #[test]
 fn extract_global_flags_multiple_flags() {
    // Given
-   let args = sv(&["app", "-v", "-d", "list"]);
+   let args = sv(&["-v", "-d", "list"]);
 
    // When
    let (_trace, verbose, _quiet, dry_run, filtered) = extract_global_flags(&args);

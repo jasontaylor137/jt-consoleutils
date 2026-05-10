@@ -26,14 +26,12 @@ use crate::output::{LogLevel, OutputMode};
 /// This function never calls [`std::process::exit`] — the application is
 /// responsible for choosing exit codes for each outcome.
 pub fn parse_cli<C: CommandParser>() -> Result<CliOutcome<C>, CliError> {
-   let args: Vec<String> = std::env::args().collect();
+   let args: Vec<String> = std::env::args().skip(1).collect();
    parse_cli_inner::<C>(&args)
 }
 
 /// Like [`parse_cli`], but parses from a caller-supplied argv slice
-/// instead of `std::env::args()`. `argv` should NOT include the program
-/// name — this function prepends a placeholder internally so the existing
-/// `skip(1)` logic (which assumes `argv[0]` is the program name) is preserved.
+/// instead of `std::env::args()`. `argv` must NOT include the program name.
 ///
 /// Use this when the caller needs to pre-process raw argv (for example,
 /// to strip an app-specific global flag) before invoking the shared parser.
@@ -42,16 +40,13 @@ pub fn parse_cli<C: CommandParser>() -> Result<CliOutcome<C>, CliError> {
 ///
 /// Same conditions as [`parse_cli`].
 pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<CliOutcome<C>, CliError> {
-   let mut args: Vec<String> = Vec::with_capacity(argv.len() + 1);
-   args.push(String::new()); // program-name placeholder; consumers skip index 0
-   args.extend(argv.iter().cloned());
-   parse_cli_inner::<C>(&args)
+   parse_cli_inner::<C>(argv)
 }
 
-/// Shared body for [`parse_cli`] and [`parse_cli_from`]. `args` is the full
-/// argv including the program name at index 0.
+/// Shared body for [`parse_cli`] and [`parse_cli_from`]. `args` contains
+/// only the arguments that follow the program name.
 fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<CliOutcome<C>, CliError> {
-   if args.len() <= 1 {
+   if args.is_empty() {
       return Ok(CliOutcome::Help(C::help_text()));
    }
 
@@ -87,19 +82,17 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<CliOutcome<C>, C
 /// Scan args for help triggers. Returns `Some(help_text)` when a help request
 /// is detected, otherwise `None`.
 ///
-/// The function defends its own preconditions: with a missing or empty `args[1]`
-/// it returns `None` instead of indexing past the end. The current sole
-/// caller already guards on `args.len() <= 1`, but a future caller shouldn't
-/// have to reason about that to avoid a panic.
+/// `args` contains only the arguments after the program name. The function
+/// returns `None` on an empty slice instead of panicking.
 fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
-   let first = args.get(1)?;
+   let first = args.first()?;
 
    // `help` as first arg
    if first == "help" {
-      return Some(match args.get(2).map(String::as_str) {
+      return Some(match args.get(1).map(String::as_str) {
          Some(name) => {
             // Pass remaining args after the command name (e.g. `help config show` → args=["show"])
-            let rest: Vec<String> = args.get(3..).map(<[String]>::to_vec).unwrap_or_default();
+            let rest: Vec<String> = args.get(2..).map(<[String]>::to_vec).unwrap_or_default();
             // Unknown subcommand after help → fall back to main help.
             C::command_help(name, &rest).unwrap_or_else(C::help_text)
          }
@@ -110,7 +103,7 @@ fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
    // -h / --help anywhere in args
    if args.iter().any(|a| a == "-h" || a == "--help") {
       // If a subcommand precedes -h, show its help
-      if let Some(cmd) = args.iter().skip(1).find(|a| C::subcommands().contains(&a.as_str()))
+      if let Some(cmd) = args.iter().find(|a| C::subcommands().contains(&a.as_str()))
          && let Some(text) = C::command_help(cmd, &[])
       {
          return Some(text);
@@ -121,8 +114,8 @@ fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
    None
 }
 
-/// Extract global flags from args (skipping program name at index 0).
-/// Returns `(trace, verbose, quiet, dry_run, filtered_args)`.
+/// Extract global flags from args. `args` contains only the arguments after
+/// the program name. Returns `(trace, verbose, quiet, dry_run, filtered_args)`.
 #[allow(unused_mut)]
 pub(super) fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, Vec<String>) {
    let mut trace = false;
@@ -132,7 +125,7 @@ pub(super) fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, 
    let mut filtered: Vec<String> = Vec::new();
    let mut past_separator = false;
 
-   for arg in args.iter().skip(1) {
+   for arg in args {
       if past_separator {
          filtered.push(arg.clone());
          continue;
