@@ -167,7 +167,7 @@ impl ScriptedShell {
 
    /// Override the shell configuration (e.g. `viewport_size`).
    #[must_use]
-   pub const fn with_config(mut self, config: ShellConfig) -> Self {
+   pub fn with_config(mut self, config: ShellConfig) -> Self {
       self.config = config;
       self
    }
@@ -620,7 +620,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_with_config_accepts_custom_viewport() {
-      let config = ShellConfig { viewport_size: 2 };
+      let config = ShellConfig { viewport_size: 2, shell_program: None };
       let shell = ScriptedShell::new()
          .with_config(config)
          .push(Script::new().out_line("line 1").out_line("line 2").out_line("line 3"));

@@ -32,18 +32,67 @@ pub use process::ProcessShell;
 /// Configuration for shell execution behaviour.
 ///
 /// Build one explicitly or use `ShellConfig::default()` to get sensible
-/// defaults (viewport height of 5 lines).
+/// defaults (viewport height of 5 lines, auto-detected shell program).
 #[derive(Debug, Clone)]
 pub struct ShellConfig {
    /// Number of output lines visible in the animated overlay viewport.
    /// Older lines scroll out of view once this limit is reached.
-   pub viewport_size: usize
+   pub viewport_size: usize,
+   /// Optional override for the shell program used by `shell_exec`,
+   /// `exec_capture`, and `exec_interactive`: `(program, flag)`, e.g.
+   /// `("zsh".into(), "-c".into())` or `("pwsh".into(), "-Command".into())`.
+   ///
+   /// When `None`, the program is auto-detected at call time: `$SHELL` on
+   /// Unix (falling back to `bash`); `pwsh` → `powershell` → `cmd /c` on
+   /// Windows.
+   pub shell_program: Option<(String, String)>
 }
 
 impl Default for ShellConfig {
    fn default() -> Self {
-      Self { viewport_size: 5 }
+      Self { viewport_size: 5, shell_program: None }
    }
+}
+
+impl ShellConfig {
+   /// Resolve the `(program, flag)` pair to use for shell-script execution.
+   ///
+   /// Returns the configured override if set, otherwise auto-detects: on
+   /// Unix, prefers a non-empty `$SHELL` then falls back to `bash`; on
+   /// Windows, prefers `pwsh` then `powershell` then `cmd`. The flag is
+   /// `-c` on Unix, `-Command` for the PowerShell variants, and `/c` for
+   /// `cmd`.
+   #[must_use]
+   pub fn effective_shell_program(&self) -> (String, String) {
+      if let Some(sp) = &self.shell_program {
+         return sp.clone();
+      }
+      detect_shell_program()
+   }
+}
+
+#[cfg(unix)]
+fn detect_shell_program() -> (String, String) {
+   detect_shell_program_unix(std::env::var("SHELL").ok().as_deref())
+}
+
+#[cfg(unix)]
+fn detect_shell_program_unix(shell_env: Option<&str>) -> (String, String) {
+   match shell_env {
+      Some(s) if !s.is_empty() => (s.to_string(), "-c".to_string()),
+      _ => ("bash".to_string(), "-c".to_string())
+   }
+}
+
+#[cfg(windows)]
+fn detect_shell_program() -> (String, String) {
+   if helpers::command_exists("pwsh") {
+      return ("pwsh".to_string(), "-Command".to_string());
+   }
+   if helpers::command_exists("powershell") {
+      return ("powershell".to_string(), "-Command".to_string());
+   }
+   ("cmd".to_string(), "/c".to_string())
 }
 
 /// Errors that can be returned by [`Shell`] methods.
@@ -117,7 +166,9 @@ pub trait Shell {
       mode: OutputMode
    ) -> Result<CommandResult, ShellError>;
 
-   /// Run an arbitrary shell script string (passed to `bash -c` / `powershell -Command`).
+   /// Run an arbitrary shell script string. The host shell is taken from
+   /// [`ShellConfig::effective_shell_program`] — either a configured
+   /// override or auto-detected from the platform.
    /// # Errors
    ///
    /// Returns a [`ShellError`] if the shell process cannot be spawned or fails.
@@ -167,9 +218,56 @@ mod tests {
    }
 
    #[test]
+   fn shell_config_default_shell_program_is_none() {
+      assert!(ShellConfig::default().shell_program.is_none());
+   }
+
+   #[test]
    fn shell_config_clone_is_equal() {
-      let cfg = ShellConfig { viewport_size: 10 };
+      let cfg = ShellConfig { viewport_size: 10, shell_program: Some(("zsh".into(), "-c".into())) };
       let cloned = cfg.clone();
       assert_eq!(cloned.viewport_size, 10);
+      assert_eq!(cloned.shell_program, Some(("zsh".into(), "-c".into())));
+   }
+
+   #[test]
+   fn effective_shell_program_returns_override_when_set() {
+      let cfg = ShellConfig { viewport_size: 5, shell_program: Some(("fish".into(), "-c".into())) };
+      assert_eq!(cfg.effective_shell_program(), ("fish".to_string(), "-c".to_string()));
+   }
+
+   #[test]
+   fn effective_shell_program_falls_back_to_detection_when_unset() {
+      // Given — default config with no override
+      let cfg = ShellConfig::default();
+      // When
+      let (program, flag) = cfg.effective_shell_program();
+      // Then — non-empty values are returned (concrete values are platform-dependent)
+      assert!(!program.is_empty());
+      assert!(!flag.is_empty());
+   }
+
+   #[cfg(unix)]
+   #[test]
+   fn detect_shell_program_unix_prefers_shell_env() {
+      let (program, flag) = super::detect_shell_program_unix(Some("/bin/zsh"));
+      assert_eq!(program, "/bin/zsh");
+      assert_eq!(flag, "-c");
+   }
+
+   #[cfg(unix)]
+   #[test]
+   fn detect_shell_program_unix_falls_back_to_bash_when_unset() {
+      let (program, flag) = super::detect_shell_program_unix(None);
+      assert_eq!(program, "bash");
+      assert_eq!(flag, "-c");
+   }
+
+   #[cfg(unix)]
+   #[test]
+   fn detect_shell_program_unix_falls_back_to_bash_when_empty() {
+      let (program, flag) = super::detect_shell_program_unix(Some(""));
+      assert_eq!(program, "bash");
+      assert_eq!(flag, "-c");
    }
 }

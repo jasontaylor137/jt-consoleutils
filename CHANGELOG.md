@@ -16,11 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING (error-string only):** `CommandResult::require_success` no longer appends `" — run with --verbose to see details"` to the error message. The library now returns just `"{cmd} failed"`, leaving consumer-specific recovery advice to the application. Consumers that want to embed a hint should use the new `require_success_with_hint(cmd, hint)` method or wrap `require_success` in their own extension trait.
 - **BREAKING:** `output::file_stats` is now gated behind the default-off `file-stats` feature. Per-run file-operation telemetry is opt-in scope for this crate; consumers that use `FileStats` / `ShowBytes` must enable `features = ["file-stats"]`. Consumers that don't need file-op summaries get a slightly leaner build.
 - **BREAKING:** Renamed `paths::script_dir` → `paths::parent_dir_or_dot` and `paths::script_filename` → `paths::file_name_str`. The old names embedded one downstream consumer's "script" concept; the new names describe the operation. Behavior is unchanged.
+- **BREAKING:** `shell::shell_exec` (free function) now takes explicit `program: &str` and `flag: &str` arguments instead of hardcoding `bash`/`powershell`. Callers that previously relied on the platform default should call `ShellConfig::effective_shell_program()` to resolve the pair, or use the `Shell::shell_exec` trait method which now uses `ShellConfig` automatically.
+- **BREAKING (default behaviour):** `ProcessShell::shell_exec`, `exec_capture`, and `exec_interactive` no longer hardcode `bash -c` / `powershell -Command`. They now consult `ShellConfig::effective_shell_program()`, which on Unix prefers `$SHELL` (falling back to `bash`) and on Windows prefers `pwsh` → `powershell` → `cmd /c`. Pin the program explicitly via `ShellConfig { shell_program: Some((..., ...)), .. }` if you need the old behaviour.
 
 ### Added
 
 - `CliError::ShowVersion(String)` variant + `CliError::show_version` constructor.
 - `CommandResult::require_success_with_hint(cmd, hint)` — builds a `ShellError::Failed` of the form `"{cmd} failed — {hint}"` for callers that have concrete recovery advice to surface.
+- `ShellConfig::shell_program: Option<(String, String)>` — optional `(program, flag)` override for shell-script execution; works around minimal containers without `bash`, locked-down `powershell.exe`, or users who prefer `pwsh`/`zsh`/`fish`.
+- `ShellConfig::effective_shell_program()` — resolves the configured override or auto-detects the platform shell.
 
 ### Migration
 

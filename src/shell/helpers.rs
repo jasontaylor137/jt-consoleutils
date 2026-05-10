@@ -76,9 +76,9 @@ pub fn command_output(program: &str, args: &[&str]) -> Result<String, ShellError
    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// Execute a script via the system shell.
-///
-/// Unix: `bash -c "script"`, Windows: `powershell -Command "script"`.
+/// Execute a script via the system shell, with an explicit `(program, flag)`
+/// pair (typically resolved via
+/// [`ShellConfig::effective_shell_program`](super::ShellConfig::effective_shell_program)).
 ///
 /// # Errors
 ///
@@ -86,16 +86,13 @@ pub fn command_output(program: &str, args: &[&str]) -> Result<String, ShellError
 /// exits with a non-zero status.
 pub fn shell_exec(
    script: &str,
+   program: &str,
+   flag: &str,
    output: &mut dyn Output,
    mode: OutputMode,
    viewport_size: usize
 ) -> Result<CommandResult, ShellError> {
-   #[cfg(unix)]
-   let (program, shell_args) = ("bash", vec!["-c", script]);
-   #[cfg(windows)]
-   let (program, shell_args) = ("powershell", vec!["-Command", script]);
-
-   exec::run_command(&format!("Running: {script}"), program, &shell_args, output, mode, viewport_size)
+   exec::run_command(&format!("Running: {script}"), program, &[flag, script], output, mode, viewport_size)
 }
 
 #[cfg(test)]
