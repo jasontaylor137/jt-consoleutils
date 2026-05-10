@@ -30,7 +30,7 @@ pub use string::StringOutput;
 
 /// Abstraction over console output, enabling tests to capture output in memory.
 ///
-/// The three standard implementations are:
+/// The two standard implementations are:
 /// - [`ConsoleOutput`] — writes to stdout, respecting `quiet` / `verbose`.
 /// - [`StringOutput`] — captures everything in a `String` for assertions.
 ///
