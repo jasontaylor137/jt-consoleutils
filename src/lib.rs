@@ -95,10 +95,15 @@ macro_rules! trace {
 /// Generate an enum + [`AsVerb`](crate::vocab::AsVerb) impl whose verb string
 /// is the variant identifier (via [`stringify!`]).
 ///
+/// Attributes (including `///` doc comments) written before the `enum` keyword
+/// are forwarded to the generated type, so each consumer documents its own
+/// vocabulary.
+///
 /// ```rust
 /// use jt_consoleutils::{verb_enum, vocab::AsVerb};
 ///
 /// verb_enum! {
+///    /// Verbs my CLI prints.
 ///    pub enum Verb {
 ///       Created,
 ///       Removed,
@@ -109,10 +114,10 @@ macro_rules! trace {
 /// ```
 #[macro_export]
 macro_rules! verb_enum {
-   ($vis:vis enum $name:ident { $($variant:ident),* $(,)? }) => {
-      /// Action verb vocabulary. Variant identifier IS the rendered verb.
+   ($(#[$attr:meta])* $vis:vis enum $name:ident { $($variant:ident),* $(,)? }) => {
+      $(#[$attr])*
       #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-      #[allow(dead_code)]
+      #[allow(dead_code, missing_docs)]
       $vis enum $name {
          $(
             #[allow(missing_docs)]
@@ -131,10 +136,15 @@ macro_rules! verb_enum {
 /// Generate an enum + [`AsNoun`](crate::vocab::AsNoun) impl. Singular and
 /// plural forms are supplied as string literals.
 ///
+/// Attributes (including `///` doc comments) written before the `enum` keyword
+/// are forwarded to the generated type, so each consumer documents its own
+/// vocabulary.
+///
 /// ```rust
 /// use jt_consoleutils::{noun_enum, vocab::AsNoun};
 ///
 /// noun_enum! {
+///    /// Nouns my CLI counts.
 ///    pub enum Noun {
 ///       Dep => "dep" / "deps",
 ///       Tool => "tool" / "tools",
@@ -146,12 +156,12 @@ macro_rules! verb_enum {
 /// ```
 #[macro_export]
 macro_rules! noun_enum {
-   ($vis:vis enum $name:ident {
+   ($(#[$attr:meta])* $vis:vis enum $name:ident {
       $($variant:ident => $singular:literal / $plural:literal),* $(,)?
    }) => {
-      /// Object noun vocabulary used for count phrases.
+      $(#[$attr])*
       #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-      #[allow(dead_code)]
+      #[allow(dead_code, missing_docs)]
       $vis enum $name {
          $(
             #[allow(missing_docs)]
