@@ -107,7 +107,21 @@ pub enum ShellError {
    Wait(String, io::Error),
    /// The process exited with a non-zero status code.
    #[error("command failed: {0}")]
-   Failed(String)
+   Failed(String),
+   /// A background reader thread (stdout or stderr pump) panicked. Carries the
+   /// downcast panic payload as a string so the original cause survives the
+   /// `Box<dyn Any>` round-trip — `.unwrap()` on a join handle would otherwise
+   /// produce an opaque `Any` panic with no source context.
+   #[error("'{program}' {stream} reader thread panicked: {payload}")]
+   ReaderPanic {
+      /// Program whose reader panicked, for context.
+      program: String,
+      /// Which pump thread it was (`"stdout"` or `"stderr"`).
+      stream: &'static str,
+      /// The downcast panic payload (string-form). Falls back to
+      /// `"<non-string panic payload>"` when the payload isn't a `&str`/`String`.
+      payload: String
+   }
 }
 
 /// The outcome of a completed shell command.

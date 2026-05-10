@@ -39,7 +39,10 @@ pub(super) struct RenderedOverlay {
 struct SpawnedCommand {
    child: Child,
    lines: mpsc::Receiver<Line>,
-   readers: Vec<thread::JoinHandle<()>>
+   /// Each reader is paired with a static label (`"stdout"` / `"stderr"`) so a
+   /// panicked thread surfaces in [`ShellError::ReaderPanic`] with enough
+   /// context to debug. Without the label, the join error is an opaque `Any`.
+   readers: Vec<(&'static str, thread::JoinHandle<()>)>
 }
 
 /// Run a shell command with mode-appropriate output:
@@ -271,7 +274,11 @@ fn spawn_command_with_lines(program: &str, args: &[&str]) -> Result<SpawnedComma
    Ok(SpawnedCommand { child, lines: rx, readers })
 }
 
-fn spawn_line_readers(stdout: ChildStdout, stderr: ChildStderr, tx: mpsc::Sender<Line>) -> Vec<thread::JoinHandle<()>> {
+fn spawn_line_readers(
+   stdout: ChildStdout,
+   stderr: ChildStderr,
+   tx: mpsc::Sender<Line>
+) -> Vec<(&'static str, thread::JoinHandle<()>)> {
    let tx_stderr = tx.clone();
 
    let stdout_reader = thread::spawn(move || {
@@ -312,7 +319,7 @@ fn spawn_line_readers(stdout: ChildStdout, stderr: ChildStderr, tx: mpsc::Sender
       }
    });
 
-   vec![stdout_reader, stderr_reader]
+   vec![("stdout", stdout_reader), ("stderr", stderr_reader)]
 }
 
 fn collect_stderr_lines(lines: mpsc::Receiver<Line>, mut on_line: impl FnMut(&str)) -> Vec<String> {
@@ -332,15 +339,44 @@ fn collect_stderr_lines(lines: mpsc::Receiver<Line>, mut on_line: impl FnMut(&st
 fn wait_and_join(
    program: &str,
    mut child: Child,
-   readers: Vec<thread::JoinHandle<()>>
+   readers: Vec<(&'static str, thread::JoinHandle<()>)>
 ) -> Result<ExitStatus, ShellError> {
    let status = child.wait().map_err(|e| ShellError::Wait(program.to_string(), e))?;
 
-   for reader in readers {
-      reader.join().unwrap();
+   // Drain every reader before returning so a panic in one doesn't leak the
+   // other thread, and so we report the *first* panic with full context
+   // instead of a `.unwrap()`'s opaque `Any` payload.
+   let mut first_panic: Option<ShellError> = None;
+   for (stream, reader) in readers {
+      if let Err(payload) = reader.join()
+         && first_panic.is_none()
+      {
+         first_panic = Some(ShellError::ReaderPanic {
+            program: program.to_string(),
+            stream,
+            payload: panic_payload_to_string(payload)
+         });
+      }
    }
 
+   if let Some(err) = first_panic {
+      return Err(err);
+   }
    Ok(status)
+}
+
+/// Best-effort downcast of a [`std::thread::JoinHandle::join`] error payload to
+/// a printable string. Most panics are `panic!("text")` (`&'static str`) or
+/// `panic!("{}", x)` (`String`); other payload types fall back to a marker so
+/// callers always get *something* useful in the error message.
+fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
+   if let Some(s) = payload.downcast_ref::<&'static str>() {
+      (*s).to_string()
+   } else if let Some(s) = payload.downcast_ref::<String>() {
+      s.clone()
+   } else {
+      "<non-string panic payload>".to_string()
+   }
 }
 
 #[cfg(test)]
@@ -385,10 +421,35 @@ mod tests {
          });
       }
       child.wait().expect("wait printf");
-      for r in readers {
+      for (_stream, r) in readers {
          r.join().expect("join reader");
       }
       assert!(texts.iter().any(|t| t == "café"), "expected café line, got: {texts:?}");
       assert!(texts.iter().any(|t| t == "naïve"), "expected naïve segment, got: {texts:?}");
+   }
+
+   /// `panic!("...")` payloads are `&'static str`. Verify we recover the
+   /// message instead of the opaque `Any`.
+   #[test]
+   fn panic_payload_to_string_recovers_static_str() {
+      let handle = thread::spawn(|| panic!("static str payload"));
+      let payload = handle.join().expect_err("thread panicked, join must Err");
+      assert_eq!(panic_payload_to_string(payload), "static str payload");
+   }
+
+   /// `panic!("{}", x)` payloads are `String`. Verify we recover that too.
+   #[test]
+   fn panic_payload_to_string_recovers_owned_string() {
+      let handle = thread::spawn(|| panic!("{}", "owned-string payload".to_string()));
+      let payload = handle.join().expect_err("thread panicked, join must Err");
+      assert_eq!(panic_payload_to_string(payload), "owned-string payload");
+   }
+
+   /// Anything else falls back to a marker rather than losing all context.
+   #[test]
+   fn panic_payload_to_string_marker_for_unknown_type() {
+      let handle = thread::spawn(|| std::panic::panic_any(42u32));
+      let payload = handle.join().expect_err("thread panicked, join must Err");
+      assert_eq!(panic_payload_to_string(payload), "<non-string panic payload>");
    }
 }
