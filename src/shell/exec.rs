@@ -6,7 +6,7 @@ use std::{
    time::{Duration, Instant}
 };
 
-use super::{CommandResult, ShellError};
+use super::{CommandResult, ShellError, helpers::format_command};
 use crate::{
    output::{Output, OutputMode},
    terminal::overlay
@@ -90,7 +90,7 @@ pub fn run_passthrough(
    mode: OutputMode
 ) -> Result<CommandResult, ShellError> {
    if mode.is_dry_run() {
-      output.dry_run_shell(&super::format_command(program, args));
+      output.dry_run_shell(&format_command(program, args));
       return Ok(CommandResult { success: true, code: None, stderr: String::new() });
    }
 
@@ -124,7 +124,7 @@ fn run_verbose(
    output: &mut dyn Output
 ) -> Result<CommandResult, ShellError> {
    output.emit_verbose(format!("{label}..."));
-   output.shell_command(&super::format_command(program, args));
+   output.shell_command(&format_command(program, args));
 
    let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
    let stderr_lines = collect_stderr_lines(lines, |line| output.shell_line(line));

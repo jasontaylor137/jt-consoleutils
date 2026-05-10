@@ -154,13 +154,13 @@ mod tests {
          files_acted: 12,
          files_skipped: 0,
          errors: 0,
-         bytes_freed: 1_288_490_189 // ~1.2 GB
+         bytes_freed: 1_288_490_189 // 1.2 GiB
       };
       let mut out = StringOutput::new();
       stats.display(&mut out, "Deleted", "duplicate", ShowBytes::Yes);
       let log = out.log();
       assert!(log.contains("Deleted 12 duplicates"));
-      assert!(log.contains("1.2 GB"));
+      assert!(log.contains("1.2 GiB"));
    }
 
    #[test]
