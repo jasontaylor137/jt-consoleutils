@@ -90,22 +90,14 @@ impl CommandResult {
    /// (e.g. "run with --verbose") should use [`CommandResult::require_success_with_hint`]
    /// or wrap this in an extension trait.
    pub fn require_success(self, cmd: &str) -> Result<(), ShellError> {
-      if self.success {
-         Ok(())
-      } else {
-         Err(ShellError::Failed(format!("{cmd} failed")))
-      }
+      if self.success { Ok(()) } else { Err(ShellError::Failed(format!("{cmd} failed"))) }
    }
 
    /// Return `Ok(())` if the command succeeded, or a `ShellError::Failed` whose
    /// message is `"{cmd} failed — {hint}"`. Use this when the application has
    /// concrete recovery advice to surface to the user.
    pub fn require_success_with_hint(self, cmd: &str, hint: &str) -> Result<(), ShellError> {
-      if self.success {
-         Ok(())
-      } else {
-         Err(ShellError::Failed(format!("{cmd} failed — {hint}")))
-      }
+      if self.success { Ok(()) } else { Err(ShellError::Failed(format!("{cmd} failed — {hint}"))) }
    }
 
    /// Return `Ok(())` if the command succeeded, or call `err` with the captured

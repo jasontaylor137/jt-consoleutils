@@ -2,19 +2,111 @@
 //! to canonicalize). For filesystem I/O with error contexts, see
 //! [`crate::fs_utils`].
 
+#[cfg(any(unix, windows))]
+use std::ffi::OsString;
 use std::{
    env,
    path::{Component, Path, PathBuf}
 };
 
-/// Return the user's home directory, or `None` if the relevant environment
-/// variable (`HOME` on Unix, `USERPROFILE` on Windows) is not set.
+/// Return the user's home directory.
+///
+/// Resolution order:
+/// - **Unix**: `$HOME` if set and non-empty, otherwise the `pw_dir` of the current uid via
+///   `getpwuid_r`. Returns `None` only if the passwd entry is missing or has no `pw_dir`.
+/// - **Windows**: `%USERPROFILE%` if set and non-empty, otherwise `%HOMEDRIVE%%HOMEPATH%` if both
+///   are set and non-empty. Returns `None` if no source yields a value.
+///
+/// Empty environment variable values are treated as unset, matching how
+/// most shells resolve `$HOME` after `unset HOME`.
 #[must_use]
 pub fn home_dir() -> Option<PathBuf> {
    #[cfg(unix)]
-   return env::var("HOME").ok().map(PathBuf::from);
+   {
+      home_dir_unix(env::var_os("HOME"))
+   }
    #[cfg(windows)]
-   return env::var("USERPROFILE").ok().map(PathBuf::from);
+   {
+      home_dir_windows(env::var_os("USERPROFILE"), env::var_os("HOMEDRIVE"), env::var_os("HOMEPATH"))
+   }
+}
+
+#[cfg(unix)]
+fn home_dir_unix(home_var: Option<OsString>) -> Option<PathBuf> {
+   if let Some(s) = home_var.filter(|s| !s.is_empty()) {
+      return Some(PathBuf::from(s));
+   }
+   home_dir_from_passwd()
+}
+
+#[cfg(windows)]
+fn home_dir_windows(
+   userprofile: Option<OsString>,
+   homedrive: Option<OsString>,
+   homepath: Option<OsString>
+) -> Option<PathBuf> {
+   if let Some(s) = userprofile.filter(|s| !s.is_empty()) {
+      return Some(PathBuf::from(s));
+   }
+   let drive = homedrive.filter(|s| !s.is_empty())?;
+   let path = homepath.filter(|s| !s.is_empty())?;
+   let mut combined = drive;
+   combined.push(path);
+   Some(PathBuf::from(combined))
+}
+
+/// Look up the home directory of the current uid via `getpwuid_r`.
+///
+/// Used as a fallback when `$HOME` is unset (CI, sudo, launchd, etc.).
+#[cfg(unix)]
+fn home_dir_from_passwd() -> Option<PathBuf> {
+   use std::{ffi::CStr, mem::MaybeUninit, os::unix::ffi::OsStringExt, ptr};
+
+   // SAFETY: `getuid` reads a process-wide value and has no failure modes.
+   let uid = unsafe { libc::getuid() };
+
+   // `_SC_GETPW_R_SIZE_MAX` may be -1 ("indeterminate"); use a generous
+   // default in that case.
+   // SAFETY: `sysconf` is safe with a known-valid name constant.
+   let mut buf_size = match unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) } {
+      n if n > 0 => n as usize,
+      _ => 1024
+   };
+   const MAX_BUF: usize = 64 * 1024;
+
+   loop {
+      let mut buf = vec![0u8; buf_size];
+      let mut passwd = MaybeUninit::<libc::passwd>::uninit();
+      let mut result: *mut libc::passwd = ptr::null_mut();
+
+      // SAFETY: pointers are valid for the lifetime of this call; `buf` is
+      // sized correctly; `result` receives a pointer into `passwd` (or
+      // null) on success.
+      let rc = unsafe {
+         libc::getpwuid_r(uid, passwd.as_mut_ptr(), buf.as_mut_ptr().cast::<libc::c_char>(), buf_size, &mut result)
+      };
+
+      if rc == 0 && !result.is_null() {
+         // SAFETY: rc==0 with non-null result means the struct is initialized.
+         let passwd = unsafe { passwd.assume_init() };
+         if passwd.pw_dir.is_null() {
+            return None;
+         }
+         // SAFETY: pw_dir points into our `buf` (still alive) and is a
+         // NUL-terminated C string per POSIX.
+         let dir_bytes = unsafe { CStr::from_ptr(passwd.pw_dir) }.to_bytes();
+         if dir_bytes.is_empty() {
+            return None;
+         }
+         return Some(PathBuf::from(OsString::from_vec(dir_bytes.to_vec())));
+      }
+
+      if rc == libc::ERANGE && buf_size < MAX_BUF {
+         buf_size = (buf_size * 2).min(MAX_BUF);
+         continue;
+      }
+      return None;
+   }
 }
 
 /// Normalize a path by resolving `.` and `..` segments without touching the
@@ -284,5 +376,119 @@ mod tests {
    #[test]
    fn script_filename_returns_none_for_root() {
       assert_eq!(script_filename(Path::new("/")), None);
+   }
+
+   // -- home_dir --
+
+   #[test]
+   #[cfg(unix)]
+   fn home_dir_unix_uses_home_when_set_and_nonempty() {
+      // Given
+      let home = OsString::from("/custom/home");
+
+      // When
+      let result = home_dir_unix(Some(home));
+
+      // Then
+      assert_eq!(result, Some(PathBuf::from("/custom/home")));
+   }
+
+   #[test]
+   #[cfg(unix)]
+   fn home_dir_unix_falls_back_to_passwd_when_home_unset() {
+      // Given — HOME is None (caller didn't pass an env value)
+
+      // When
+      let result = home_dir_unix(None);
+
+      // Then — passwd lookup should yield a real directory in any sane test env
+      assert!(result.is_some(), "passwd fallback should resolve a home dir for the current uid");
+      assert!(result.unwrap().is_absolute(), "passwd home dir should be absolute");
+   }
+
+   #[test]
+   #[cfg(unix)]
+   fn home_dir_unix_falls_back_to_passwd_when_home_empty() {
+      // Given — HOME is set but empty (matches `unset` semantics in most shells)
+      let empty = OsString::new();
+
+      // When
+      let result = home_dir_unix(Some(empty));
+
+      // Then — empty value is ignored, passwd lookup runs
+      assert!(result.is_some(), "empty HOME should be treated as unset and fall through to passwd");
+   }
+
+   #[test]
+   #[cfg(unix)]
+   fn home_dir_from_passwd_returns_some() {
+      // Given / When — direct test of the syscall path
+      let result = home_dir_from_passwd();
+
+      // Then
+      assert!(result.is_some(), "current uid should have a passwd entry with pw_dir");
+   }
+
+   #[test]
+   #[cfg(windows)]
+   fn home_dir_windows_uses_userprofile_when_set() {
+      // Given
+      let profile = OsString::from(r"C:\Users\alice");
+
+      // When
+      let result = home_dir_windows(Some(profile), None, None);
+
+      // Then
+      assert_eq!(result, Some(PathBuf::from(r"C:\Users\alice")));
+   }
+
+   #[test]
+   #[cfg(windows)]
+   fn home_dir_windows_falls_back_to_drive_plus_path() {
+      // Given — USERPROFILE unset, but HOMEDRIVE+HOMEPATH set
+      let drive = OsString::from(r"C:");
+      let path = OsString::from(r"\Users\bob");
+
+      // When
+      let result = home_dir_windows(None, Some(drive), Some(path));
+
+      // Then
+      assert_eq!(result, Some(PathBuf::from(r"C:\Users\bob")));
+   }
+
+   #[test]
+   #[cfg(windows)]
+   fn home_dir_windows_treats_empty_userprofile_as_unset() {
+      // Given — empty USERPROFILE, valid HOMEDRIVE+HOMEPATH
+      let drive = OsString::from(r"D:");
+      let path = OsString::from(r"\home\carol");
+
+      // When
+      let result = home_dir_windows(Some(OsString::new()), Some(drive), Some(path));
+
+      // Then
+      assert_eq!(result, Some(PathBuf::from(r"D:\home\carol")));
+   }
+
+   #[test]
+   #[cfg(windows)]
+   fn home_dir_windows_returns_none_when_no_source_set() {
+      // Given / When
+      let result = home_dir_windows(None, None, None);
+
+      // Then
+      assert!(result.is_none());
+   }
+
+   #[test]
+   #[cfg(windows)]
+   fn home_dir_windows_returns_none_when_only_homedrive_set() {
+      // Given — HOMEDRIVE without HOMEPATH is incomplete
+
+      // When
+      let result = home_dir_windows(None, Some(OsString::from(r"C:")), None);
+
+      // Then
+      assert!(result.is_none());
    }
 }
