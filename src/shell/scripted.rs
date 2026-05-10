@@ -217,11 +217,12 @@ impl Shell for OverlayScriptedShell {
       output: &mut dyn Output,
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
-      let script = self
-         .scripts
-         .borrow_mut()
-         .pop_front()
-         .expect("OverlayScriptedShell: run_command called but script queue is empty");
+      let Some(script) = self.scripts.borrow_mut().pop_front() else {
+         return Err(ShellError::Failed(format!(
+            "OverlayScriptedShell: run_command({label:?}) called but script queue is empty — \
+             push() one Script per expected call"
+         )));
+      };
 
       let (tx, rx) = mpsc::channel::<Line>();
       let success = script.success;
@@ -603,13 +604,16 @@ mod tests {
    }
 
    #[test]
-   fn scripted_shell_empty_queue_panics() {
+   fn scripted_shell_empty_queue_returns_failed_error() {
+      use crate::shell::ShellError;
       let shell = OverlayScriptedShell::new();
       let mut out = StringOutput::new();
-      let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-         shell.run_command("oops", "unused", &[], &mut out, default_mode()).unwrap();
-      }));
-      assert!(result.is_err());
+      let err = shell.run_command("oops", "unused", &[], &mut out, default_mode()).unwrap_err();
+      let ShellError::Failed(msg) = err else {
+         panic!("expected ShellError::Failed, got {err:?}");
+      };
+      assert!(msg.contains("script queue is empty"), "msg should describe the misuse: {msg}");
+      assert!(msg.contains("oops"), "msg should mention the label: {msg}");
    }
 
    // -----------------------------------------------------------------------
