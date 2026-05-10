@@ -352,8 +352,9 @@ mod tests {
 
    #[test]
    fn matches_to_json_pretty_for_equivalent_data() {
-      use crate::json::{JsonValue, to_json_pretty};
       use std::collections::BTreeMap;
+
+      use crate::json::{JsonValue, to_json_pretty};
 
       // Build the same shape via both paths. Use keys in alphabetical order
       // so that BTreeMap (sorted) and StructSerializer (insertion order) emit

@@ -5,8 +5,8 @@
 //! - `print_version(version_str: &str)` — print a version string
 //!
 //! Both are intended to be called from `main()` when handling
-//! [`CliError::ShowHelp`](crate::cli::CliError::ShowHelp) or
-//! [`CliError::ShowVersion`](crate::cli::CliError::ShowVersion) returned by
+//! [`CliOutcome::Help`](crate::cli::CliOutcome::Help) or
+//! [`CliOutcome::Version`](crate::cli::CliOutcome::Version) returned by
 //! [`parse_cli`](crate::cli::parse_cli). The application is responsible for
 //! calling [`std::process::exit`] (typically with status `0`) afterwards.
 
@@ -65,16 +65,20 @@ pub fn wrap_help_text(text: &str, width: usize) -> String {
 /// Lines longer than the terminal width are word-wrapped before colorizing,
 /// preserving leading indentation. This function does **not** call
 /// [`std::process::exit`] — callers handling
-/// [`CliError::ShowHelp`](crate::cli::CliError::ShowHelp) typically exit
+/// [`CliOutcome::Help`](crate::cli::CliOutcome::Help) typically exit
 /// with status `0` afterwards.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// match parse_cli::<Cmd>() {
-///     Ok(parsed) => run(parsed),
-///     Err(CliError::ShowHelp(text)) => {
+///     Ok(CliOutcome::Parsed(parsed)) => run(parsed),
+///     Ok(CliOutcome::Help(text)) => {
 ///         jt_consoleutils::cli::help::print_help(&text);
+///         std::process::exit(0);
+///     }
+///     Ok(CliOutcome::Version(text)) => {
+///         jt_consoleutils::cli::help::print_version(&text);
 ///         std::process::exit(0);
 ///     }
 ///     Err(e) => { eprintln!("Error: {e}"); std::process::exit(1); }
@@ -88,7 +92,7 @@ pub fn print_help(text: &str) {
 
 /// Print `version_str` to stdout.
 ///
-/// Intended for handling [`CliError::ShowVersion`](crate::cli::CliError::ShowVersion).
+/// Intended for handling [`CliOutcome::Version`](crate::cli::CliOutcome::Version).
 /// `version_str` is typically produced by
 /// [`crate::cli::version::version_string`]. This function does **not** call
 /// [`std::process::exit`] — the caller decides what to do next.

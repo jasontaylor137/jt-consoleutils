@@ -11,7 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** Help and version are no longer modeled as `CliError` variants. `cli::parse_cli` / `parse_cli_from` now return `Result<CliOutcome<C>, CliError>`, where the new `CliOutcome` enum carries the three success shapes (`Parsed(ParsedCli<C>)`, `Help(String)`, `Version(String)`). `CliError` shrinks to genuine errors only (`Usage`, `Conflict`); the `ShowHelp` and `ShowVersion` variants and their `show_help` / `show_version` constructors are gone. Sub-parsers that previously returned `Err(CliError::ShowHelp(...))` to surface help on unknown sub-subcommands should now return `Err(CliError::Usage(...))` pointing the user at `help <cmd>`, since `Result<C, CliError>` no longer has a non-error path.
 - **BREAKING:** `shell::scripted::ScriptedShell` renamed to `OverlayScriptedShell`. The new name reflects the type's narrow scope — it only scripts `Shell::run_command` to drive the spinner overlay. Every other `Shell` method (`shell_exec`, `command_exists`, `command_output`, `exec_capture`, `exec_interactive`) now **panics** with an explanatory message instead of silently returning fake success. Tests that previously relied on the silent stubs were masking misuse; compose `OverlayScriptedShell` with `MockShell` (or your own `Shell` impl) when you need both overlay-rendered `run_command` calls and other shell behaviour.
+
+### Migration
+
+```rust
+// Before
+match parse_cli::<Cmd>() {
+    Ok(parsed) => run(parsed),
+    Err(CliError::ShowHelp(t))    => { print_help(&t);    exit(0); }
+    Err(CliError::ShowVersion(t)) => { print_version(&t); exit(0); }
+    Err(e) => { eprintln!("Error: {e}"); exit(1); }
+}
+
+// After
+match parse_cli::<Cmd>() {
+    Ok(CliOutcome::Parsed(parsed)) => run(parsed),
+    Ok(CliOutcome::Help(t))        => { print_help(&t);    exit(0); }
+    Ok(CliOutcome::Version(t))     => { print_version(&t); exit(0); }
+    Err(e) => { eprintln!("Error: {e}"); exit(1); }
+}
+```
 
 ---
 

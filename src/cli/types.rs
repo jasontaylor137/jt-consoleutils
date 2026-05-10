@@ -1,4 +1,4 @@
-//! Core types for CLI parsing: [`CommandParser`], [`ParsedCli`], [`CliError`].
+//! Core types for CLI parsing: [`CommandParser`], [`ParsedCli`], [`CliOutcome`], [`CliError`].
 
 use crate::output::OutputMode;
 
@@ -11,13 +11,34 @@ pub struct ParsedCli<C> {
    pub command: C
 }
 
+/// Successful outcomes from [`parse_cli`](crate::cli::parse_cli) /
+/// [`parse_cli_from`](crate::cli::parse_cli_from).
+///
+/// Argument parsing has three success shapes — the user gave a real command,
+/// the user asked for help, or the user asked for the version. None of these
+/// are errors, so they share the `Ok` arm of the result; only [`CliError`]
+/// values are surfaced via `Err`.
+///
+/// The framework never calls [`std::process::exit`] itself — the application
+/// owns its exit codes. Help and version requests are produced as plain
+/// strings so the caller can print, log, embed, or otherwise route them as
+/// it wishes.
+#[derive(Debug)]
+pub enum CliOutcome<C> {
+   /// Args parsed into a runnable command.
+   Parsed(ParsedCli<C>),
+   /// User requested help (`--help`/`-h`/`help [<cmd>]`/no args). Print and
+   /// typically exit with status `0`.
+   Help(String),
+   /// User requested `--version`. Print and typically exit with status `0`.
+   Version(String)
+}
+
 /// Errors that can occur during CLI argument parsing.
 ///
-/// Note that two variants — [`ShowHelp`](Self::ShowHelp) and
-/// [`ShowVersion`](Self::ShowVersion) — are not actually errors. They signal
-/// that the user requested help or version output and the application should
-/// print the carried text and exit with status `0`. The framework never calls
-/// [`std::process::exit`] itself; the application owns its exit codes.
+/// Help and version requests are **not** modeled here — they flow through the
+/// `Ok` arm as [`CliOutcome::Help`] / [`CliOutcome::Version`]. This enum only
+/// carries genuine usage failures.
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
    /// Invalid usage: missing required arg, unknown subcommand, etc.
@@ -25,22 +46,7 @@ pub enum CliError {
    Usage(String),
    /// Conflicting flags that cannot be combined.
    #[error("{0}")]
-   Conflict(String),
-   /// Display the carried help text as a successful response, rather than as an
-   /// error. Returned by the framework on `--help`/`-h`/`help` and by parsers
-   /// when reaching a position where printing the matching command's help is
-   /// the right answer (e.g. `myprog config` with no subcommand). The caller
-   /// is expected to detect this variant and print the text via
-   /// [`crate::cli::help::print_help`] (then typically `exit(0)`) instead of
-   /// routing through the "Error: ..." path used for [`Usage`](Self::Usage)
-   /// and [`Conflict`](Self::Conflict).
-   #[error("{0}")]
-   ShowHelp(String),
-   /// Display the carried version string and exit successfully. Returned by
-   /// the framework when `--version` is detected. Caller typically prints via
-   /// [`crate::cli::help::print_version`] and then `exit(0)`.
-   #[error("{0}")]
-   ShowVersion(String)
+   Conflict(String)
 }
 
 impl CliError {
@@ -52,16 +58,6 @@ impl CliError {
    /// Create a [`CliError::Conflict`] from anything that converts to `String`.
    pub fn conflict(msg: impl Into<String>) -> Self {
       CliError::Conflict(msg.into())
-   }
-
-   /// Create a [`CliError::ShowHelp`] from anything that converts to `String`.
-   pub fn show_help(text: impl Into<String>) -> Self {
-      CliError::ShowHelp(text.into())
-   }
-
-   /// Create a [`CliError::ShowVersion`] from anything that converts to `String`.
-   pub fn show_version(text: impl Into<String>) -> Self {
-      CliError::ShowVersion(text.into())
    }
 }
 
@@ -75,7 +71,7 @@ impl CliError {
 /// # Exit codes
 ///
 /// The framework never calls [`std::process::exit`]. Help and version
-/// requests are surfaced as [`CliError::ShowHelp`] / [`CliError::ShowVersion`]
+/// requests are surfaced as [`CliOutcome::Help`] / [`CliOutcome::Version`]
 /// so the application can decide how (and whether) to terminate the process.
 /// This makes the parser embeddable in TUIs, tests, and tools that wrap
 /// other CLIs.

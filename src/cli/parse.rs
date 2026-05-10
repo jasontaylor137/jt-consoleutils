@@ -1,6 +1,6 @@
 //! CLI argument parsing: global flag extraction, help/version handling, subcommand dispatch.
 
-use super::types::{CliError, CommandParser, ParsedCli};
+use super::types::{CliError, CliOutcome, CommandParser, ParsedCli};
 use crate::output::{LogLevel, OutputMode};
 
 /// Parse CLI arguments using the app's [`CommandParser`] implementation.
@@ -9,19 +9,23 @@ use crate::output::{LogLevel, OutputMode};
 /// `-t`/`--trace`), `--version`, `--help`/`-h`, and `help <cmd>` before
 /// dispatching to the app's subcommand parser.
 ///
-/// # Errors
+/// # Returns
 ///
-/// - [`CliError::ShowHelp`] when help output was requested (no args, `-h`, `--help`, or `help
+/// - `Ok(CliOutcome::Parsed(..))` — args resolved to a runnable command.
+/// - `Ok(CliOutcome::Help(text))` — help was requested (no args, `-h`, `--help`, or `help
 ///   [<cmd>]`). The caller should print the carried text via [`crate::cli::help::print_help`] and
 ///   exit with status `0`.
-/// - [`CliError::ShowVersion`] when `--version` was passed. Print and exit `0`.
+/// - `Ok(CliOutcome::Version(text))` — `--version` was passed. Print and exit `0`.
+///
+/// # Errors
+///
 /// - [`CliError::Conflict`] for mutually exclusive flags (`-v` + `-q`, `-q` + `-d`).
 /// - [`CliError::Usage`] for unknown subcommands when [`CommandParser::default_command`] returns
 ///   `None`, or for any error surfaced by the app's parser.
 ///
 /// This function never calls [`std::process::exit`] — the application is
-/// responsible for choosing exit codes for each variant.
-pub fn parse_cli<C: CommandParser>() -> Result<ParsedCli<C>, CliError> {
+/// responsible for choosing exit codes for each outcome.
+pub fn parse_cli<C: CommandParser>() -> Result<CliOutcome<C>, CliError> {
    let args: Vec<String> = std::env::args().collect();
    parse_cli_inner::<C>(&args)
 }
@@ -34,10 +38,10 @@ pub fn parse_cli<C: CommandParser>() -> Result<ParsedCli<C>, CliError> {
 /// Use this when the caller needs to pre-process raw argv (for example,
 /// to strip an app-specific global flag) before invoking the shared parser.
 ///
-/// # Errors
+/// # Returns / Errors
 ///
 /// Same conditions as [`parse_cli`].
-pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<ParsedCli<C>, CliError> {
+pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<CliOutcome<C>, CliError> {
    let mut args: Vec<String> = Vec::with_capacity(argv.len() + 1);
    args.push(String::new()); // program-name placeholder; consumers skip index 0
    args.extend(argv.iter().cloned());
@@ -46,12 +50,14 @@ pub fn parse_cli_from<C: CommandParser>(argv: &[String]) -> Result<ParsedCli<C>,
 
 /// Shared body for [`parse_cli`] and [`parse_cli_from`]. `args` is the full
 /// argv including the program name at index 0.
-fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, CliError> {
+fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<CliOutcome<C>, CliError> {
    if args.len() <= 1 {
-      return Err(CliError::ShowHelp(C::help_text()));
+      return Ok(CliOutcome::Help(C::help_text()));
    }
 
-   handle_help::<C>(args)?;
+   if let Some(text) = detect_help::<C>(args) {
+      return Ok(CliOutcome::Help(text));
+   }
 
    let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(args);
 
@@ -63,42 +69,41 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, Cl
    }
 
    if filtered.iter().any(|a| a == "--version") {
-      return Err(CliError::ShowVersion(C::version()));
+      return Ok(CliOutcome::Version(C::version()));
+   }
+
+   if filtered.is_empty() {
+      // Only global flags were given (e.g. `app -v`) — show help.
+      return Ok(CliOutcome::Help(C::help_text()));
    }
 
    let level = flags_to_level(trace, verbose, quiet);
    let mode = OutputMode { level, dry_run };
 
    let command = dispatch::<C>(&filtered)?;
-   Ok(ParsedCli { mode, command })
+   Ok(CliOutcome::Parsed(ParsedCli { mode, command }))
 }
 
-/// Scan args for help triggers. Returns `Err(CliError::ShowHelp(...))` when a
-/// help request is detected, otherwise `Ok(())`.
+/// Scan args for help triggers. Returns `Some(help_text)` when a help request
+/// is detected, otherwise `None`.
 ///
 /// The function defends its own preconditions: with a missing or empty `args[1]`
-/// it returns `Ok(())` instead of indexing past the end. The current sole
+/// it returns `None` instead of indexing past the end. The current sole
 /// caller already guards on `args.len() <= 1`, but a future caller shouldn't
 /// have to reason about that to avoid a panic.
-fn handle_help<C: CommandParser>(args: &[String]) -> Result<(), CliError> {
-   let Some(first) = args.get(1) else {
-      return Ok(());
-   };
+fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
+   let first = args.get(1)?;
 
    // `help` as first arg
    if first == "help" {
-      let cmd = args.get(2).map(|s| s.as_str());
-      return Err(match cmd {
+      return Some(match args.get(2).map(String::as_str) {
          Some(name) => {
             // Pass remaining args after the command name (e.g. `help config show` → args=["show"])
             let rest: Vec<String> = args.get(3..).map(<[String]>::to_vec).unwrap_or_default();
-            match C::command_help(name, &rest) {
-               Some(text) => CliError::ShowHelp(text),
-               // Unknown subcommand after help — show main help
-               None => CliError::ShowHelp(C::help_text())
-            }
+            // Unknown subcommand after help → fall back to main help.
+            C::command_help(name, &rest).unwrap_or_else(C::help_text)
          }
-         None => CliError::ShowHelp(C::help_text())
+         None => C::help_text()
       });
    }
 
@@ -108,12 +113,12 @@ fn handle_help<C: CommandParser>(args: &[String]) -> Result<(), CliError> {
       if let Some(cmd) = args.iter().skip(1).find(|a| C::subcommands().contains(&a.as_str()))
          && let Some(text) = C::command_help(cmd, &[])
       {
-         return Err(CliError::ShowHelp(text));
+         return Some(text);
       }
-      return Err(CliError::ShowHelp(C::help_text()));
+      return Some(C::help_text());
    }
 
-   Ok(())
+   None
 }
 
 /// Extract global flags from args (skipping program name at index 0).
@@ -167,11 +172,12 @@ pub(super) fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLeve
 }
 
 /// Dispatch to the app's subcommand parser or default command handler.
+///
+/// Caller guarantees `filtered` is non-empty; `parse_cli_inner` routes the
+/// empty case to [`CliOutcome::Help`] before reaching here.
 pub(super) fn dispatch<C: CommandParser>(filtered: &[String]) -> Result<C, CliError> {
-   let (first, rest) = match filtered.split_first() {
-      Some((f, r)) => (f.as_str(), r),
-      None => return Err(CliError::ShowHelp(C::help_text()))
-   };
+   let (first, rest) = filtered.split_first().expect("dispatch called with empty filtered args");
+   let first = first.as_str();
 
    // Check for recognized subcommand
    if C::subcommands().contains(&first) {

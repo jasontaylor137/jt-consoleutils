@@ -14,4 +14,4 @@ pub mod version;
 
 pub use helpers::to_pargs;
 pub use parse::{parse_cli, parse_cli_from};
-pub use types::{CliError, CommandParser, ParsedCli};
+pub use types::{CliError, CliOutcome, CommandParser, ParsedCli};

@@ -1,6 +1,6 @@
 use super::{dispatch, extract_global_flags, flags_to_level, parse_cli_from};
 use crate::{
-   cli::types::{CliError, CommandParser},
+   cli::types::{CliError, CliOutcome, CommandParser},
    output::LogLevel
 };
 
@@ -386,11 +386,11 @@ fn dispatch_subcommand_parser_error_propagates() {
 }
 
 // ---------------------------------------------------------------------------
-// parse_cli_from — help / version surface as ShowHelp / ShowVersion (no exit)
+// parse_cli_from — help / version flow through Ok(CliOutcome::{Help,Version})
 // ---------------------------------------------------------------------------
 
 #[test]
-fn parse_cli_from_no_args_returns_show_help() {
+fn parse_cli_from_no_args_returns_help_outcome() {
    // Given
    let argv: Vec<String> = sv(&[]);
 
@@ -399,13 +399,13 @@ fn parse_cli_from_no_args_returns_show_help() {
 
    // Then
    match result {
-      Err(CliError::ShowHelp(text)) => assert_eq!(text, "Test help text"),
-      other => panic!("expected ShowHelp, got {other:?}")
+      Ok(CliOutcome::Help(text)) => assert_eq!(text, "Test help text"),
+      other => panic!("expected Ok(Help), got {other:?}")
    }
 }
 
 #[test]
-fn parse_cli_from_help_flag_returns_show_help() {
+fn parse_cli_from_help_flag_returns_help_outcome() {
    // Given
    let argv = sv(&["--help"]);
 
@@ -414,13 +414,13 @@ fn parse_cli_from_help_flag_returns_show_help() {
 
    // Then
    match result {
-      Err(CliError::ShowHelp(text)) => assert_eq!(text, "Test help text"),
-      other => panic!("expected ShowHelp, got {other:?}")
+      Ok(CliOutcome::Help(text)) => assert_eq!(text, "Test help text"),
+      other => panic!("expected Ok(Help), got {other:?}")
    }
 }
 
 #[test]
-fn parse_cli_from_help_short_flag_returns_show_help() {
+fn parse_cli_from_help_short_flag_returns_help_outcome() {
    // Given
    let argv = sv(&["-h"]);
 
@@ -428,7 +428,7 @@ fn parse_cli_from_help_short_flag_returns_show_help() {
    let result = parse_cli_from::<TestCmd>(&argv);
 
    // Then
-   assert!(matches!(result, Err(CliError::ShowHelp(_))));
+   assert!(matches!(result, Ok(CliOutcome::Help(_))));
 }
 
 #[test]
@@ -441,8 +441,8 @@ fn parse_cli_from_help_subcommand_returns_command_help() {
 
    // Then
    match result {
-      Err(CliError::ShowHelp(text)) => assert_eq!(text, "Greet someone"),
-      other => panic!("expected ShowHelp(\"Greet someone\"), got {other:?}")
+      Ok(CliOutcome::Help(text)) => assert_eq!(text, "Greet someone"),
+      other => panic!("expected Ok(Help(\"Greet someone\")), got {other:?}")
    }
 }
 
@@ -456,8 +456,8 @@ fn parse_cli_from_help_unknown_subcommand_falls_back_to_main_help() {
 
    // Then
    match result {
-      Err(CliError::ShowHelp(text)) => assert_eq!(text, "Test help text"),
-      other => panic!("expected ShowHelp main help, got {other:?}")
+      Ok(CliOutcome::Help(text)) => assert_eq!(text, "Test help text"),
+      other => panic!("expected Ok(Help) main help, got {other:?}")
    }
 }
 
@@ -471,13 +471,13 @@ fn parse_cli_from_subcommand_then_help_returns_command_help() {
 
    // Then
    match result {
-      Err(CliError::ShowHelp(text)) => assert_eq!(text, "Greet someone"),
-      other => panic!("expected ShowHelp(\"Greet someone\"), got {other:?}")
+      Ok(CliOutcome::Help(text)) => assert_eq!(text, "Greet someone"),
+      other => panic!("expected Ok(Help(\"Greet someone\")), got {other:?}")
    }
 }
 
 #[test]
-fn parse_cli_from_version_returns_show_version() {
+fn parse_cli_from_version_returns_version_outcome() {
    // Given
    let argv = sv(&["--version"]);
 
@@ -486,8 +486,19 @@ fn parse_cli_from_version_returns_show_version() {
 
    // Then
    match result {
-      Err(CliError::ShowVersion(text)) => assert_eq!(text, "test 1.0"),
-      other => panic!("expected ShowVersion, got {other:?}")
+      Ok(CliOutcome::Version(text)) => assert_eq!(text, "test 1.0"),
+      other => panic!("expected Ok(Version), got {other:?}")
+   }
+}
+
+#[test]
+fn parse_cli_from_only_global_flags_returns_help_outcome() {
+   // Given: only a global flag, no command — should fall back to help.
+   #[cfg(feature = "verbose")]
+   {
+      let argv = sv(&["-v"]);
+      let result = parse_cli_from::<TestCmd>(&argv);
+      assert!(matches!(result, Ok(CliOutcome::Help(_))));
    }
 }
 
@@ -499,5 +510,20 @@ fn parse_cli_from_conflicting_flags_returns_conflict_not_help() {
       let argv = sv(&["-v", "-q", "list"]);
       let result = parse_cli_from::<TestCmd>(&argv);
       assert!(matches!(result, Err(CliError::Conflict(_))));
+   }
+}
+
+#[test]
+fn parse_cli_from_parsed_command_returns_parsed_outcome() {
+   // Given
+   let argv = sv(&["greet", "Alice"]);
+
+   // When
+   let result = parse_cli_from::<TestCmd>(&argv);
+
+   // Then
+   match result {
+      Ok(CliOutcome::Parsed(p)) => assert_eq!(p.command, TestCmd::Greet { name: "Alice".to_string() }),
+      other => panic!("expected Ok(Parsed), got {other:?}")
    }
 }
