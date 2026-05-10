@@ -98,7 +98,8 @@ impl Spinner {
    fn draw(&mut self) {
       let stdout = io::stdout();
       let mut out = stdout.lock();
-      self.last_rows = render_frame(&mut out, &self.label, &self.viewport, self.frame, self.last_rows, self.viewport_size);
+      self.last_rows =
+         render_frame(&mut out, &self.label, &self.viewport, self.frame, self.last_rows, self.viewport_size);
    }
 }
 

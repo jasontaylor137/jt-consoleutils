@@ -1,13 +1,29 @@
 //! `${VAR}` expansion helper.
 //!
 //! Substitutes `${ENV_VAR}` patterns from the host process environment.
-//! Undefined variables expand to empty string. A bare `$` not followed by `{`
-//! is left untouched.
+//!
+//! ## Supported
+//!
+//! - `${VAR}` — replaced with the value of `VAR`, or empty string if unset.
+//! - A bare `$` not followed by `{` is left untouched (e.g. `cost is $5`).
+//!
+//! ## NOT supported
+//!
+//! - `$VAR` (bare-word form) — left untouched.
+//! - `${VAR:-default}`, `${VAR:?msg}`, and other POSIX expansion modifiers.
+//! - Backslash escaping (e.g. `\${VAR}` is not preserved literally).
+//! - Nested expansion (`${OUTER_${INNER}}`).
+//!
+//! ## Unmatched `${`
+//!
+//! If the input contains `${` with no closing `}`, the literal text from `${`
+//! to end-of-input is preserved verbatim in the output (no silent data loss).
 
 use std::env;
 
 /// Expand `${ENV_VAR}` patterns from the host environment.
-/// Undefined variables expand to empty string.
+/// Undefined variables expand to empty string. See module docs for the full
+/// list of supported and unsupported forms.
 #[must_use]
 pub fn expand_env_vars(input: &str) -> String {
    let mut result = String::with_capacity(input.len());
@@ -17,13 +33,22 @@ pub fn expand_env_vars(input: &str) -> String {
       if ch == '$' && chars.peek() == Some(&'{') {
          chars.next(); // consume '{'
          let mut var_name = String::new();
+         let mut closed = false;
          for c in chars.by_ref() {
             if c == '}' {
+               closed = true;
                break;
             }
             var_name.push(c);
          }
-         result.push_str(&env::var(&var_name).unwrap_or_default());
+         if closed {
+            result.push_str(&env::var(&var_name).unwrap_or_default());
+         } else {
+            // Unmatched `${` — preserve the literal input rather than silently
+            // discarding the rest of the string.
+            result.push_str("${");
+            result.push_str(&var_name);
+         }
       } else {
          result.push(ch);
       }
@@ -94,5 +119,13 @@ mod tests {
    #[test]
    fn expand_empty_input() {
       assert_eq!(expand_env_vars(""), "");
+   }
+
+   #[test]
+   fn expand_unmatched_open_brace_preserves_literal() {
+      // No closing `}` — must NOT silently consume the rest of the input.
+      assert_eq!(expand_env_vars("prefix-${UNCLOSED"), "prefix-${UNCLOSED");
+      assert_eq!(expand_env_vars("${"), "${");
+      assert_eq!(expand_env_vars("a ${b c"), "a ${b c");
    }
 }
