@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING:** `cli::parse_cli` / `parse_cli_from` no longer call `std::process::exit`. Help and version requests now surface as `CliError::ShowHelp` and the new `CliError::ShowVersion` variant; the application owns its exit codes. This makes the parser embeddable in TUIs, tests, and tools that wrap other CLIs.
 - **BREAKING:** `cli::help::print_help` and `cli::help::print_version` no longer return `!`. They print to stdout and return `()`; callers decide whether (and how) to exit afterwards.
 - **BREAKING (error-string only):** `CommandResult::require_success` no longer appends `" — run with --verbose to see details"` to the error message. The library now returns just `"{cmd} failed"`, leaving consumer-specific recovery advice to the application. Consumers that want to embed a hint should use the new `require_success_with_hint(cmd, hint)` method or wrap `require_success` in their own extension trait.
+- **BREAKING:** `output::file_stats` is now gated behind the default-off `file-stats` feature. Per-run file-operation telemetry is opt-in scope for this crate; consumers that use `FileStats` / `ShowBytes` must enable `features = ["file-stats"]`. Consumers that don't need file-op summaries get a slightly leaner build.
 
 ### Added
 

@@ -16,6 +16,7 @@ build-support = []
 verbose = []
 trace = []
 dotenv = ["dep:dotenvy"]
+file-stats = []
 
 [dependencies]
 dotenvy = { version = "0.15", optional = true }

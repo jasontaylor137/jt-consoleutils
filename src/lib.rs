@@ -22,6 +22,7 @@
 //! | [`vocab`] | `AsVerb` / `AsNoun` traits for action-line vocabulary |
 //! | [`dotenv`] *(feature `dotenv`)* | `.env` file loader |
 //! | `build_support` *(feature `build-support`)* | `build.rs` helper that emits `BUILD_DATE` / `GIT_HASH` |
+//! | `output::file_stats` *(feature `file-stats`)* | `FileStats` counters + `--- Summary ---` row for file-op CLIs |
 //!
 //! # Quick start — output
 //!

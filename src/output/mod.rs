@@ -13,6 +13,7 @@
 //!   [`StringOutput::log`](crate::output::StringOutput::log).
 
 mod console;
+#[cfg(feature = "file-stats")]
 pub mod file_stats;
 mod mode;
 pub mod progress;
