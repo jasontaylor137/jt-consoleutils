@@ -109,6 +109,7 @@ impl Progress {
    pub fn clear(&mut self, output: &mut dyn Output) {
       if self.last_len > 0 {
          output.write(&format!("\r{}\r", " ".repeat(self.last_len)));
+         self.last_len = 0;
       }
    }
 
@@ -122,7 +123,6 @@ impl Progress {
    /// [`Progress::redraw`] will draw a fresh bar.
    pub fn finish(&mut self, output: &mut dyn Output) {
       self.clear(output);
-      self.last_len = 0;
    }
 
    /// Current step count (`0` initially, bumped by each [`Progress::next`]).
@@ -303,6 +303,21 @@ mod tests {
       // Then — clear writes \r + spaces + \r
       assert!(out.log().len() > before);
       assert!(out.log().ends_with('\r'));
+   }
+
+   #[test]
+   fn clear_zeroes_last_len() {
+      // Given — bar drawn so last_len > 0
+      let mut out = StringOutput::new();
+      let mut progress = Progress::new("", 5);
+      progress.next(&mut out);
+      assert!(progress.last_len > 0);
+
+      // When
+      progress.clear(&mut out);
+
+      // Then — subsequent redraws don't pad against a stale length
+      assert_eq!(progress.last_len, 0);
    }
 
    #[test]
