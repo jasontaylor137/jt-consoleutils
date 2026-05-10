@@ -25,10 +25,16 @@ pub fn command_parts(cmd: &Command) -> (String, Vec<String>) {
 ///
 /// Scans `PATH` directories directly instead of spawning `which`/`where.exe`,
 /// avoiding a subprocess fork on every call.
+///
+/// On Windows, candidate extensions come from `%PATHEXT%` (lowercased, leading
+/// dot stripped). Falls back to `exe;cmd;bat;com` when `PATHEXT` is unset or
+/// empty, matching the legacy default.
 #[must_use]
 pub fn command_exists(program: &str) -> bool {
    let path_var = std::env::var_os("PATH").unwrap_or_default();
    let sep = if cfg!(windows) { ';' } else { ':' };
+   #[cfg(windows)]
+   let pathext = parse_pathext(&std::env::var("PATHEXT").unwrap_or_default());
    for dir in path_var.to_string_lossy().split(sep) {
       if dir.is_empty() {
          continue;
@@ -39,15 +45,33 @@ pub fn command_exists(program: &str) -> bool {
       }
       #[cfg(windows)]
       {
-         for ext in &["exe", "cmd", "bat", "com"] {
-            let with_ext = candidate.with_extension(ext);
-            if with_ext.is_file() {
+         for ext in &pathext {
+            if candidate.with_extension(ext).is_file() {
                return true;
             }
          }
       }
    }
    false
+}
+
+/// Normalize a `%PATHEXT%`-style value: split on `;`, trim, lowercase, strip
+/// leading `.`, drop empties. Falls back to the legacy default when the result
+/// is empty so callers always get at least the historical extension set.
+#[cfg(windows)]
+fn parse_pathext(raw: &str) -> Vec<String> {
+   let parsed: Vec<String> = raw
+      .split(';')
+      .filter_map(|ext| {
+         let trimmed = ext.trim().trim_start_matches('.');
+         if trimmed.is_empty() { None } else { Some(trimmed.to_ascii_lowercase()) }
+      })
+      .collect();
+   if parsed.is_empty() {
+      vec!["exe".to_string(), "cmd".to_string(), "bat".to_string(), "com".to_string()]
+   } else {
+      parsed
+   }
 }
 
 /// Run a command and return its stdout (trimmed).
@@ -107,5 +131,28 @@ mod tests {
    #[case("cargo", &["build", "--release"], "cargo build --release")]
    fn format_command_joins_program_and_args(#[case] program: &str, #[case] args: &[&str], #[case] expected: &str) {
       assert_eq!(format_command(program, args), expected);
+   }
+
+   #[cfg(windows)]
+   mod pathext {
+      use super::super::parse_pathext;
+
+      #[test]
+      fn parses_typical_value_lowercased_without_dots() {
+         let ext = parse_pathext(".COM;.EXE;.BAT;.CMD;.PS1");
+         assert_eq!(ext, vec!["com", "exe", "bat", "cmd", "ps1"]);
+      }
+
+      #[test]
+      fn ignores_empty_segments_and_whitespace() {
+         let ext = parse_pathext(";.exe; ; .ps1 ;");
+         assert_eq!(ext, vec!["exe", "ps1"]);
+      }
+
+      #[test]
+      fn falls_back_to_legacy_default_when_empty() {
+         assert_eq!(parse_pathext(""), vec!["exe", "cmd", "bat", "com"]);
+         assert_eq!(parse_pathext(";;;"), vec!["exe", "cmd", "bat", "com"]);
+      }
    }
 }
