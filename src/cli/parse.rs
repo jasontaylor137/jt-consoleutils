@@ -75,14 +75,23 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<ParsedCli<C>, Cl
 
 /// Scan args for help triggers. Returns `Err(CliError::ShowHelp(...))` when a
 /// help request is detected, otherwise `Ok(())`.
+///
+/// The function defends its own preconditions: with a missing or empty `args[1]`
+/// it returns `Ok(())` instead of indexing past the end. The current sole
+/// caller already guards on `args.len() <= 1`, but a future caller shouldn't
+/// have to reason about that to avoid a panic.
 fn handle_help<C: CommandParser>(args: &[String]) -> Result<(), CliError> {
+   let Some(first) = args.get(1) else {
+      return Ok(());
+   };
+
    // `help` as first arg
-   if args[1] == "help" {
+   if first == "help" {
       let cmd = args.get(2).map(|s| s.as_str());
       return Err(match cmd {
          Some(name) => {
             // Pass remaining args after the command name (e.g. `help config show` → args=["show"])
-            let rest: Vec<String> = args[3..].to_vec();
+            let rest: Vec<String> = args.get(3..).map(<[String]>::to_vec).unwrap_or_default();
             match C::command_help(name, &rest) {
                Some(text) => CliError::ShowHelp(text),
                // Unknown subcommand after help — show main help
