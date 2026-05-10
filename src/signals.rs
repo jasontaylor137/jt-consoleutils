@@ -15,9 +15,21 @@
 //! those cases must be cleaned up by the caller's own next-run logic.
 
 /// Install signal handlers that let the parent survive Ctrl+C so cleanup hooks
-/// can run after the child exits. Safe to call exactly once at startup.
-pub fn install_parent_handlers() {
+/// can run after the child exits.
+///
+/// Mutually exclusive with [`install_interrupt_handler`]: both target the same
+/// SIGINT slot, so calling one after the other would silently overwrite the
+/// first handler. Pick one per process.
+///
+/// # Errors
+///
+/// Returns [`SignalInstallError::AlreadyInstalled`] if a SIGINT handler from
+/// this module has already been installed (either function, calling either
+/// one a second time).
+pub fn install_parent_handlers() -> Result<(), SignalInstallError> {
+   try_claim_sigint(InstallSlot::Parent)?;
    set_sigint_ignored(true);
+   Ok(())
 }
 
 /// RAII guard that restores the default SIGINT behavior for its lifetime, so
@@ -99,7 +111,7 @@ unsafe fn install_sigint_action(handler: libc::sighandler_t) {
 // Cooperative interrupt flag
 // ---------------------------------------------------------------------------
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
@@ -108,14 +120,20 @@ static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 /// [`is_interrupted`] at safe break points and exit cleanly when set, so
 /// post-loop summaries (progress finish, stats, etc.) can still run.
 ///
-/// **Conflicts with [`install_parent_handlers`]** — both target the same
-/// SIGINT slot. Pick one per process: `install_parent_handlers` for CLIs
-/// that spawn a child and want the parent to survive Ctrl+C until cleanup;
+/// Mutually exclusive with [`install_parent_handlers`] — both target the same
+/// SIGINT slot. Pick one per process: `install_parent_handlers` for CLIs that
+/// spawn a child and want the parent to survive Ctrl+C until cleanup;
 /// `install_interrupt_handler` for in-process work loops that want
 /// cooperative cancellation.
 ///
-/// Safe to call exactly once at startup.
-pub fn install_interrupt_handler() {
+/// # Errors
+///
+/// Returns [`SignalInstallError::AlreadyInstalled`] if a SIGINT handler from
+/// this module has already been installed (either function, calling either
+/// one a second time).
+pub fn install_interrupt_handler() -> Result<(), SignalInstallError> {
+   try_claim_sigint(InstallSlot::Interrupt)?;
+
    #[cfg(unix)]
    {
       // SAFETY: handle_sigint is async-signal-safe — it only does an atomic
@@ -130,6 +148,68 @@ pub fn install_interrupt_handler() {
       use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
       SetConsoleCtrlHandler(Some(handle_ctrl_c), 1);
    }
+
+   Ok(())
+}
+
+/// Returned when a second SIGINT handler install is attempted. The two install
+/// functions in this module are mutually exclusive — both target the same
+/// kernel-level SIGINT slot — so the second call cannot succeed without
+/// silently overwriting the first.
+#[derive(Debug, thiserror::Error)]
+pub enum SignalInstallError {
+   /// A SIGINT handler is already installed by `existing` and a new install
+   /// would clobber it.
+   #[error(
+      "SIGINT handler already installed by {existing}; install_parent_handlers and install_interrupt_handler are mutually exclusive and may each be called at most once per process"
+   )]
+   AlreadyInstalled {
+      /// Name of the function that performed the original install.
+      existing: &'static str
+   }
+}
+
+#[derive(Copy, Clone)]
+enum InstallSlot {
+   Parent = 1,
+   Interrupt = 2
+}
+
+impl InstallSlot {
+   fn name(self) -> &'static str {
+      match self {
+         Self::Parent => "install_parent_handlers",
+         Self::Interrupt => "install_interrupt_handler"
+      }
+   }
+}
+
+static INSTALL_STATE: AtomicU8 = AtomicU8::new(0);
+
+/// Atomically claim the SIGINT slot for `slot`, or report which function got
+/// there first. Uses a single CAS so concurrent installers across threads
+/// can't both think they won.
+fn try_claim_sigint(slot: InstallSlot) -> Result<(), SignalInstallError> {
+   match INSTALL_STATE.compare_exchange(0, slot as u8, Ordering::SeqCst, Ordering::SeqCst) {
+      Ok(_) => Ok(()),
+      Err(prev) => {
+         let existing = match prev {
+            x if x == InstallSlot::Parent as u8 => InstallSlot::Parent.name(),
+            x if x == InstallSlot::Interrupt as u8 => InstallSlot::Interrupt.name(),
+            _ => "unknown"
+         };
+         Err(SignalInstallError::AlreadyInstalled { existing })
+      }
+   }
+}
+
+/// Test-only escape hatch to clear the install latch so each test can exercise
+/// a fresh install. Production code must not call this — clearing the latch
+/// without restoring the underlying disposition leaves the SIGINT slot in a
+/// stale state.
+#[cfg(test)]
+fn reset_install_state_for_tests() {
+   INSTALL_STATE.store(0, Ordering::SeqCst);
 }
 
 /// Returns `true` if a SIGINT / Ctrl+C has been received since the last
@@ -164,7 +244,14 @@ unsafe extern "system" fn handle_ctrl_c(ctrl_type: u32) -> windows_sys::core::BO
 
 #[cfg(test)]
 mod tests {
+   use std::sync::Mutex;
+
    use super::*;
+
+   /// Tests that mutate INSTALL_STATE or the actual SIGINT slot must serialize
+   /// — cargo test runs them in parallel and the slot is process-global.
+   /// Tests that only touch INTERRUPTED don't need this.
+   static INSTALL_TEST_LOCK: Mutex<()> = Mutex::new(());
 
    #[test]
    fn is_interrupted_starts_false() {
@@ -189,8 +276,10 @@ mod tests {
    #[cfg(unix)]
    #[test]
    fn sigaction_handler_flips_interrupted_flag() {
+      let _guard = INSTALL_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
       reset_interrupt();
-      install_interrupt_handler();
+      reset_install_state_for_tests();
+      install_interrupt_handler().expect("first install in fresh test should succeed");
 
       // SAFETY: raise() with a valid signal number is always defined.
       let rc = unsafe { libc::raise(libc::SIGINT) };
@@ -203,5 +292,32 @@ mod tests {
       // Leave the slot in a benign state for any later tests.
       reset_interrupt();
       set_sigint_ignored(true);
+      reset_install_state_for_tests();
+   }
+
+   /// Bundled into one test so the global INSTALL_STATE / SIGINT slot are
+   /// touched by exactly one parallel-test thread at a time. (The other tests
+   /// in this module share the same state but only touch INTERRUPTED, not
+   /// INSTALL_STATE — see `reset_install_state_for_tests` / unix-only
+   /// `sigaction_handler_flips_interrupted_flag` for the careful path.)
+   #[test]
+   fn install_latch_rejects_redundant_and_cross_function_calls() {
+      let _guard = INSTALL_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+      reset_install_state_for_tests();
+
+      // First install wins.
+      install_parent_handlers().expect("first install should succeed");
+
+      // Same function called twice → AlreadyInstalled, naming itself.
+      let err = install_parent_handlers().expect_err("second parent install should fail");
+      let SignalInstallError::AlreadyInstalled { existing } = err;
+      assert_eq!(existing, "install_parent_handlers");
+
+      // Cross-function call → AlreadyInstalled, naming the original installer.
+      let err = install_interrupt_handler().expect_err("interrupt install should be rejected");
+      let SignalInstallError::AlreadyInstalled { existing } = err;
+      assert_eq!(existing, "install_parent_handlers");
+
+      reset_install_state_for_tests();
    }
 }
