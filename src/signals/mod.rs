@@ -3,16 +3,20 @@
 //! Two distinct, mutually exclusive APIs live in submodules — pick one per
 //! process, since both target the same kernel-level SIGINT slot:
 //!
-//! - [`parent`] — install a no-op SIGINT handler so the parent CLI survives
-//!   Ctrl+C and reaches its post-run cleanup code while the spawned child
-//!   exits on its own. Use this for tools that wrap a child process.
-//! - [`interrupt`] — install a handler that flips a global flag so
-//!   long-running in-process loops can poll [`interrupt::is_interrupted`]
-//!   and exit cooperatively. Use this for in-process work loops.
+//! - [`crate::signals::parent`] — install a no-op SIGINT handler so the
+//!   parent CLI survives Ctrl+C and reaches its post-run cleanup code while
+//!   the spawned child exits on its own. Use this for tools that wrap a
+//!   child process.
+//! - [`crate::signals::interrupt`] — install a handler that flips a global
+//!   flag so long-running in-process loops can poll
+//!   [`crate::signals::interrupt::is_interrupted`] and exit cooperatively.
+//!   Use this for in-process work loops.
 //!
-//! Both functions share a single install latch ([`SignalInstallError`]):
-//! whichever is called first wins, and the second returns
-//! [`SignalInstallError::AlreadyInstalled`] naming the original installer.
+//! Both functions share a single install latch
+//! ([`crate::signals::SignalInstallError`]): whichever is called first wins,
+//! and the second returns
+//! [`crate::signals::SignalInstallError::AlreadyInstalled`] naming the
+//! original installer.
 //!
 //! On Windows the parent path uses
 //! `SetConsoleCtrlHandler(NULL, TRUE)` (ignore Ctrl+C); the interrupt path
@@ -25,8 +29,9 @@
 //!
 //! Both APIs are also re-exported at the [`crate::signals`] root so existing
 //! consumers don't break. New code should prefer the submodule paths
-//! ([`parent::install_parent_handlers`], [`interrupt::install_interrupt_handler`])
-//! to make the API choice explicit at the import site.
+//! ([`crate::signals::parent::install_parent_handlers`],
+//! [`crate::signals::interrupt::install_interrupt_handler`]) to make the API
+//! choice explicit at the import site.
 
 pub mod interrupt;
 pub mod parent;

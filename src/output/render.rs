@@ -48,9 +48,9 @@ pub struct RenderTheme {
    pub warn_label: &'static str,
    /// Label printed after [`error_glyph`](Self::error_glyph). Default: `error:`.
    pub error_label: &'static str,
-   /// Connector word for [`Trailing::PrepTo`](super::action::Trailing::PrepTo). Default: `to`.
+   /// Connector word for [`super::action::Trailing::PrepTo`]. Default: `to`.
    pub prep_to: &'static str,
-   /// Connector word for [`Trailing::PrepFrom`](super::action::Trailing::PrepFrom). Default: `from`.
+   /// Connector word for [`super::action::Trailing::PrepFrom`]. Default: `from`.
    pub prep_from: &'static str
 }
 

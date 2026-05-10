@@ -1,14 +1,23 @@
-//! Help and version printing helpers for CLI tools.
+//! Help-and-version printers used at the [`CliOutcome`] handoff.
 //!
-//! Provides two functions that print to stdout (without exiting):
-//! - `print_help(text: &str)` — word-wrap, colorize, and print a help string
-//! - `print_version(version_str: &str)` — print a version string
+//! The CLI framework in [`crate::cli::parse`] is split-phase: it never writes
+//! to stdout or calls [`std::process::exit`] itself. Instead it returns a
+//! [`CliOutcome`] carrying the help or version *text*, leaving the actual
+//! print, exit-code choice, and any post-print work to the application's
+//! `main`. This module supplies the two leaf printers that close that loop:
 //!
-//! Both are intended to be called from `main()` when handling
-//! [`CliOutcome::Help`](crate::cli::CliOutcome::Help) or
-//! [`CliOutcome::Version`](crate::cli::CliOutcome::Version) returned by
-//! [`parse_cli`](crate::cli::parse_cli). The application is responsible for
-//! calling [`std::process::exit`] (typically with status `0`) afterwards.
+//! - [`crate::cli::help::print_help`] — word-wraps to the current terminal
+//!   width, applies the left-to-right rainbow colorizer, and writes to stdout.
+//! - [`crate::cli::help::print_version`] — writes the version string to stdout
+//!   verbatim.
+//!
+//! Neither function exits or returns a status; both are meant to be called
+//! directly when [`CliOutcome::Help`] / [`CliOutcome::Version`] is matched.
+//! See the example on [`crate::cli::help::print_help`] for the full pattern.
+//!
+//! [`CliOutcome`]: crate::cli::CliOutcome
+//! [`CliOutcome::Help`]: crate::cli::CliOutcome::Help
+//! [`CliOutcome::Version`]: crate::cli::CliOutcome::Version
 
 use crate::terminal::{colorize::colorize_text_with_width, terminal_width};
 
