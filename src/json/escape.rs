@@ -1,3 +1,7 @@
+//! Shared JSON string-escape helper used by both the [`super::serialize`] and
+//! [`super::to_json`] code paths. See [`super::serialize`] for the dialect
+//! the output conforms to.
+
 /// Append a JSON-escaped, double-quoted string to `out`.
 pub(crate) fn push_json_string(out: &mut String, s: &str) {
    out.push('"');

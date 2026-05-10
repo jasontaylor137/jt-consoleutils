@@ -1,3 +1,28 @@
+//! JSON and JSONC parsing into [`JsonValue`].
+//!
+//! [`parse_json`] accepts strict JSON per RFC 8259 with one extension: raw
+//! UTF-8 bytes are accepted inside strings (in addition to `\uXXXX` escapes).
+//!
+//! [`parse_jsonc`] accepts a small JSONC superset on top of strict JSON:
+//!
+//! - **Line comments** — `// ...` to end of line.
+//! - **Block comments** — `/* ... */`, non-nesting.
+//! - **Trailing commas** — a single trailing `,` is allowed before `}` or `]`. (Multiple
+//!   consecutive trailing commas are not recognized.)
+//!
+//! Comment markers inside string literals are preserved verbatim. JSONC is
+//! handled by stripping these features in a pre-pass and then running the
+//! strict-JSON parser.
+//!
+//! Features intentionally **not** supported (parsers will error):
+//!
+//! - Single-quoted strings.
+//! - Unquoted object keys.
+//! - Hex, octal, leading-`+`, or `Infinity` / `NaN` numbers.
+//! - Multi-line string continuations.
+//! - JSON5 escape sequences beyond the standard JSON set (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`,
+//!   `\t`, `\uXXXX`).
+
 use std::collections::BTreeMap;
 
 use super::{error::JsonError, value::JsonValue};
