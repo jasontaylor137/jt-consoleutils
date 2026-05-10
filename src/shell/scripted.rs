@@ -6,8 +6,12 @@
 //! recommended composition pattern with [`MockShell`].
 //!
 //! [`OverlayScriptedShell`] and [`Script`] are intended for **testing use**. They are not gated
-//! behind `#[cfg(test)]` so that downstream crates can use them in their own test suites, but
-//! they carry no meaningful runtime cost in production builds (LTO eliminates unused code).
+//! behind `#[cfg(test)]` so that downstream crates can use them in their own test suites. The
+//! types are always compiled into the crate; rustc's dead-code elimination (and LTO, when
+//! enabled) can drop them from a release binary that never constructs them or holds a
+//! `dyn Shell` pointing at them, but exclusion is not guaranteed. Consumers that require
+//! guaranteed exclusion should put their test-only construction sites behind `#[cfg(test)]`
+//! or a feature flag of their own.
 //!
 //! Use [`OverlayScriptedShell::with_config`] to customise overlay behaviour (e.g. viewport
 //! height).

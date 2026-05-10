@@ -8,7 +8,12 @@ use crate::output::{Output, OutputMode};
 /// Mock shell for unit tests: records calls and returns configurable results.
 ///
 /// Intended for **testing use**. Not gated behind `#[cfg(test)]` so that downstream
-/// crates can use it in their own test suites; LTO eliminates it from production builds.
+/// crates can use it in their own test suites. The type is always compiled into the
+/// crate; rustc's dead-code elimination (and LTO, when enabled) can drop it from a
+/// release binary that never constructs it or holds a `dyn Shell` pointing at it,
+/// but exclusion is not guaranteed. Consumers that require guaranteed exclusion
+/// should put their test-only construction sites behind `#[cfg(test)]` or a feature
+/// flag of their own.
 pub struct MockShell {
    /// Ordered log of every call made to this shell, formatted as `"program arg1 arg2"`.
    pub calls: RefCell<Vec<String>>,
