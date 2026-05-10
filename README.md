@@ -59,6 +59,28 @@ For full API reference, see [docs.rs](https://docs.rs/jt-consoleutils).
 
 ---
 
+## Scope and non-goals
+
+`jt-consoleutils` is **synchronous and `std`-only** by design. It targets
+hosted command-line tools that run a handful of child processes, parse a few
+config files, and print to a terminal — the workload where blocking I/O on
+the main thread is the right shape.
+
+- **No `async` / `tokio` support, and none planned.** The `Shell` trait's
+  methods are all blocking. If you're building an async tool or embedding
+  shell calls into a `tokio` runtime, you'll want a different abstraction —
+  either [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/)
+  directly, or your own `Shell`-shaped trait whose methods return futures.
+- **No `no_std` support, and none planned.** The crate uses `std::process`,
+  `std::fs`, `std::io`, threads, and `std::time` throughout; an embedded
+  port would be a near-total rewrite.
+
+Both are deliberate choices, not oversights. File an issue if your use case
+is close enough to the current shape that a small extension would help, but
+don't expect either to land in 0.x.
+
+---
+
 ## Two examples
 
 ### Output with verbosity, captured in tests

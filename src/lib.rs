@@ -5,6 +5,20 @@
 //! traits with mock/test implementations are provided for every abstraction
 //! that touches I/O or process execution.
 //!
+//! # Scope and non-goals
+//!
+//! This crate is **synchronous and `std`-only** by design. It targets hosted
+//! command-line tools — the workload where blocking I/O on the main thread is
+//! the right shape.
+//!
+//! - **No `async` / `tokio` support, and none planned.** The [`shell::Shell`]
+//!   trait's methods are all blocking. Async consumers should use
+//!   [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/) directly
+//!   or define their own future-returning shell trait.
+//! - **No `no_std` support, and none planned.** The crate uses
+//!   `std::process`, `std::fs`, `std::io`, threads, and `std::time`
+//!   throughout; an embedded port would be a near-total rewrite.
+//!
 //! # Modules at a glance
 //!
 //! | Module | What it provides |
