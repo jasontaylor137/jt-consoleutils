@@ -6,12 +6,10 @@
 
 /// Help and version printing helpers for CLI entry points.
 pub mod help;
-mod helpers;
 mod parse;
 mod types;
 /// Build-info version string formatter.
 pub mod version;
 
-pub use helpers::to_pargs;
-pub use parse::{parse_cli, parse_cli_from};
+pub use parse::{parse_cli, parse_cli_from, to_pargs};
 pub use types::{CliError, CliOutcome, CommandParser, ParsedCli};

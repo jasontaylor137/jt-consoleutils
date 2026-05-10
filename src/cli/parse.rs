@@ -3,6 +3,14 @@
 use super::types::{CliError, CliOutcome, CommandParser, ParsedCli};
 use crate::output::{LogLevel, OutputMode};
 
+/// Convert a slice of `String` args into a [`pico_args::Arguments`] for
+/// optional flag extraction within subcommand parsers. Allocates one
+/// `OsString` per arg.
+#[must_use]
+pub fn to_pargs(args: &[String]) -> pico_args::Arguments {
+   pico_args::Arguments::from_vec(args.iter().map(std::ffi::OsString::from).collect())
+}
+
 /// Parse CLI arguments using the app's [`CommandParser`] implementation.
 ///
 /// Handles global flags (`-v`/`--verbose`, `-q`/`--quiet`, `-d`/`--dry-run`,
