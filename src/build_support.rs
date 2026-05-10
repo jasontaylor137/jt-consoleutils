@@ -45,8 +45,8 @@ use std::{
 pub fn emit_build_info() {
    let build_date = compute_build_date();
    let git_hash = compute_git_hash();
-   println!("cargo:rustc-env=BUILD_DATE={}", build_date);
-   println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+   println!("cargo:rustc-env=BUILD_DATE={build_date}");
+   println!("cargo:rustc-env=GIT_HASH={git_hash}");
    emit_git_rerun_directives();
 }
 
@@ -120,7 +120,7 @@ fn compute_build_date() -> String {
    }
 
    let d = days_left + 1;
-   format!("{:04}-{:02}-{:02}", y, m, d)
+   format!("{y:04}-{m:02}-{d:02}")
 }
 
 fn compute_git_hash() -> String {
