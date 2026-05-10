@@ -206,7 +206,7 @@ pub(super) fn render_overlay_lines(label: &str, lines: &mpsc::Receiver<Line>, vi
       let stdout_handle = io::stdout();
       let mut out = stdout_handle.lock();
       let mut frame = 0usize;
-      let mut last_rows = overlay::render_frame(&mut out, label, &[], 0, 0, viewport_size);
+      let mut last_rows = overlay::render_frame(&mut out, label, &[], 0, 0, viewport_size).unwrap_or(0);
 
       loop {
          match lines.recv_timeout(FRAME_INTERVAL) {
@@ -230,17 +230,19 @@ pub(super) fn render_overlay_lines(label: &str, lines: &mpsc::Receiver<Line>, vi
                   }
                }
                frame += 1;
-               last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size);
+               last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size)
+                  .unwrap_or(last_rows);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                frame += 1;
-               last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size);
+               last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size)
+                  .unwrap_or(last_rows);
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break
          }
       }
 
-      overlay::clear_lines(&mut out, last_rows);
+      let _ = overlay::clear_lines(&mut out, last_rows);
    }
 
    RenderedOverlay { viewport, stderr_lines, elapsed: start.elapsed() }

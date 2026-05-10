@@ -20,18 +20,21 @@ fn term_width() -> usize {
 /// before printing a final summary line.
 ///
 /// ```no_run
-/// use std::{thread, time::Duration};
+/// use std::{io, thread, time::Duration};
 ///
 /// use jt_consoleutils::terminal::overlay::Spinner;
 ///
-/// let mut s = Spinner::new("downloading", 5);
-/// for i in 0..20 {
-///    s.push_line(format!("chunk {i} of 20"));
-///    s.tick();
-///    thread::sleep(Duration::from_millis(80));
+/// fn run() -> io::Result<()> {
+///    let mut s = Spinner::new("downloading", 5);
+///    for i in 0..20 {
+///       s.push_line(format!("chunk {i} of 20"));
+///       s.tick()?;
+///       thread::sleep(Duration::from_millis(80));
+///    }
+///    s.clear()?;
+///    println!("done");
+///    Ok(())
 /// }
-/// s.clear();
-/// println!("done");
 /// ```
 pub struct Spinner {
    label: String,
@@ -74,45 +77,84 @@ impl Spinner {
    }
 
    /// Advance the spinner glyph by one frame and redraw.
-   pub fn tick(&mut self) {
+   ///
+   /// # Errors
+   ///
+   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
+   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
+   pub fn tick(&mut self) -> io::Result<()> {
       self.frame = self.frame.wrapping_add(1);
-      self.draw();
+      self.draw()
    }
 
    /// Redraw without advancing the spinner glyph. Useful after a label or
    /// viewport change when no animation tick is desired.
-   pub fn render(&mut self) {
-      self.draw();
+   ///
+   /// # Errors
+   ///
+   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
+   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
+   pub fn render(&mut self) -> io::Result<()> {
+      self.draw()
    }
 
    /// Erase the current frame from the terminal. The spinner can be used again
    /// after this — the frame counter is preserved so animation continues from
    /// where it left off.
-   pub fn clear(&mut self) {
+   ///
+   /// # Errors
+   ///
+   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
+   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
+   pub fn clear(&mut self) -> io::Result<()> {
       let stdout = io::stdout();
       let mut out = stdout.lock();
-      clear_lines(&mut out, self.last_rows);
+      clear_lines(&mut out, self.last_rows)?;
       self.last_rows = 0;
+      Ok(())
    }
 
-   fn draw(&mut self) {
+   /// # Errors
+   ///
+   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
+   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
+   fn draw(&mut self) -> io::Result<()> {
       let stdout = io::stdout();
       let mut out = stdout.lock();
       self.last_rows =
-         render_frame(&mut out, &self.label, &self.viewport, self.frame, self.last_rows, self.viewport_size);
+         render_frame(&mut out, &self.label, &self.viewport, self.frame, self.last_rows, self.viewport_size)?;
+      Ok(())
    }
 }
 
-/// Move cursor up `n` lines and clear each line with `\r\x1b[K`, returning cursor to the top.
-pub(crate) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
+/// Treat `BrokenPipe` as success — the consumer end is gone (e.g. `head` cut
+/// us off) and there's no recovery, so a decorative spinner should just stop
+/// drawing rather than panic. Other errors propagate.
+fn ignore_broken_pipe(result: io::Result<()>) -> io::Result<()> {
+   match result {
+      Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+      other => other
+   }
+}
+
+/// Move cursor up `n` lines and clear each line with `\r\x1b[K`, returning
+/// cursor to the top.
+///
+/// # Errors
+///
+/// Returns the underlying [`io::Error`] when stdout writes fail. A closed
+/// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
+pub(crate) fn clear_lines(out: &mut io::StdoutLock, n: usize) -> io::Result<()> {
    if n == 0 {
-      return;
+      return Ok(());
    }
-   write!(out, "\x1b[{n}A").unwrap();
-   for _ in 0..n {
-      write!(out, "\r\x1b[K\n").unwrap();
-   }
-   write!(out, "\x1b[{n}A").unwrap();
+   ignore_broken_pipe((|| {
+      write!(out, "\x1b[{n}A")?;
+      for _ in 0..n {
+         write!(out, "\r\x1b[K\n")?;
+      }
+      write!(out, "\x1b[{n}A")
+   })())
 }
 
 /// Erase the previous frame (cursor-up + per-line clear), draw the spinner header and
@@ -123,6 +165,13 @@ pub(crate) fn clear_lines(out: &mut io::StdoutLock, n: usize) {
 /// bar stored as a single `StdoutCr` unit). Each such slot is expanded into multiple
 /// visual rows; all rows count toward `prev_lines` so the next frame erases them
 /// correctly.
+///
+/// # Errors
+///
+/// Returns the underlying [`io::Error`] when stdout writes fail. A closed pipe
+/// (e.g. piping to `head`) is treated as success and absorbed silently — the
+/// returned row count still reflects what *would* have been drawn so the next
+/// frame's erase math stays consistent.
 pub(crate) fn render_frame(
    out: &mut io::StdoutLock,
    label: &str,
@@ -130,40 +179,42 @@ pub(crate) fn render_frame(
    frame: usize,
    prev_lines: usize,
    viewport_size: usize
-) -> usize {
+) -> io::Result<usize> {
    let tw = term_width();
 
-   if prev_lines > 0 {
-      write!(out, "\x1b[{prev_lines}A").unwrap();
-      for _ in 0..prev_lines {
-         write!(out, "\r\x1b[K\n").unwrap();
-      }
-      write!(out, "\x1b[{prev_lines}A").unwrap();
-   }
-
-   let spinner = SPINNER[frame % SPINNER.len()];
-   // "⠋ label..." = 1 (spinner) + 1 (space) + label + 3 ("...") = label + 5 visible columns
-   let max_label = tw.saturating_sub(5).max(1);
-   let display_label: String = label.chars().take(max_label).collect();
-   write!(out, "\r\x1b[K{spinner} \x1b[1m{display_label}...\x1b[0m\n").unwrap();
-
-   // Expand every slot into its constituent visual rows so that a single slot
-   // holding "line1\nline2" renders as two terminal rows.
    let visual_rows: Vec<&str> = viewport.iter().flat_map(|s| s.split('\n')).collect();
-
    let shown_start = visual_rows.len().saturating_sub(viewport_size);
    let shown = &visual_rows[shown_start..];
-   for row in shown {
-      let display = truncate_visible(row, tw.saturating_sub(2).max(1));
-      if display.contains('\x1b') {
-         write!(out, "\r\x1b[K  {display}\n").unwrap();
-      } else {
-         write!(out, "\r\x1b[K  \x1b[2m{display}\x1b[0m\n").unwrap();
-      }
-   }
+   let rows = 1 + shown.len();
 
-   out.flush().unwrap();
-   1 + shown.len()
+   ignore_broken_pipe((|| {
+      if prev_lines > 0 {
+         write!(out, "\x1b[{prev_lines}A")?;
+         for _ in 0..prev_lines {
+            write!(out, "\r\x1b[K\n")?;
+         }
+         write!(out, "\x1b[{prev_lines}A")?;
+      }
+
+      let spinner = SPINNER[frame % SPINNER.len()];
+      // "⠋ label..." = 1 (spinner) + 1 (space) + label + 3 ("...") = label + 5 visible columns
+      let max_label = tw.saturating_sub(5).max(1);
+      let display_label: String = label.chars().take(max_label).collect();
+      write!(out, "\r\x1b[K{spinner} \x1b[1m{display_label}...\x1b[0m\n")?;
+
+      for row in shown {
+         let display = truncate_visible(row, tw.saturating_sub(2).max(1));
+         if display.contains('\x1b') {
+            write!(out, "\r\x1b[K  {display}\n")?;
+         } else {
+            write!(out, "\r\x1b[K  \x1b[2m{display}\x1b[0m\n")?;
+         }
+      }
+
+      out.flush()
+   })())?;
+
+   Ok(rows)
 }
 
 /// Truncate `s` to at most `max_visible` visible columns, skipping over ANSI
@@ -204,9 +255,33 @@ fn truncate_visible(s: &str, max_visible: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+   use std::io;
+
    use rstest::rstest;
 
-   use super::{Spinner, truncate_visible};
+   use super::{Spinner, ignore_broken_pipe, truncate_visible};
+
+   // -----------------------------------------------------------------------
+   // ignore_broken_pipe — the pipeline-safety guarantee
+   // -----------------------------------------------------------------------
+
+   #[test]
+   fn broken_pipe_is_absorbed_as_success() {
+      let err = io::Error::new(io::ErrorKind::BrokenPipe, "pipe closed");
+      assert!(ignore_broken_pipe(Err(err)).is_ok());
+   }
+
+   #[test]
+   fn other_io_errors_propagate() {
+      let err = io::Error::new(io::ErrorKind::PermissionDenied, "nope");
+      let result = ignore_broken_pipe(Err(err));
+      assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+   }
+
+   #[test]
+   fn ok_passes_through() {
+      assert!(ignore_broken_pipe(Ok(())).is_ok());
+   }
 
    // -----------------------------------------------------------------------
    // Spinner state transitions (rendering itself is not exercised — that

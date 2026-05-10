@@ -10,21 +10,22 @@
 //! spinner with a streaming log of recent events, and a spinner whose last
 //! line is overwritten in place (carriage-return style for a progress bar).
 
-use std::{thread, time::Duration};
+use std::{io, thread, time::Duration};
 
 use jt_consoleutils::terminal::overlay::Spinner;
 
-fn plain_spinner() {
+fn plain_spinner() -> io::Result<()> {
    let mut s = Spinner::new("waiting on slow thing", 0);
    for _ in 0..30 {
-      s.tick();
+      s.tick()?;
       thread::sleep(Duration::from_millis(80));
    }
-   s.clear();
+   s.clear()?;
    println!("plain spinner: done");
+   Ok(())
 }
 
-fn streaming_log() {
+fn streaming_log() -> io::Result<()> {
    let mut s = Spinner::new("processing items", 5);
    let items = [
       "loaded config.json",
@@ -42,30 +43,33 @@ fn streaming_log() {
       s.push_line(item);
       // A few ticks per line so the spinner glyph keeps animating.
       for _ in 0..6 {
-         s.tick();
+         s.tick()?;
          thread::sleep(Duration::from_millis(80));
       }
    }
-   s.clear();
+   s.clear()?;
    println!("streaming log: done ({} steps)", items.len());
+   Ok(())
 }
 
-fn progress_bar() {
+fn progress_bar() -> io::Result<()> {
    let mut s = Spinner::new("downloading 50 MB", 1);
    for pct in 0..=100 {
       let filled = pct / 5;
       let empty = 20 - filled;
       let bar = format!("[{}{}] {pct:>3}%", "#".repeat(filled), " ".repeat(empty));
       s.replace_last_line(bar);
-      s.tick();
+      s.tick()?;
       thread::sleep(Duration::from_millis(40));
    }
-   s.clear();
+   s.clear()?;
    println!("progress bar: done");
+   Ok(())
 }
 
-fn main() {
-   plain_spinner();
-   streaming_log();
-   progress_bar();
+fn main() -> io::Result<()> {
+   plain_spinner()?;
+   streaming_log()?;
+   progress_bar()?;
+   Ok(())
 }
