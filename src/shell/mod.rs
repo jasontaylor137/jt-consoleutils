@@ -7,8 +7,9 @@
 //! - [`DryRunShell`] — logs what would be executed and returns fake success; safe to use in dry-run
 //!   workflows.
 //! - [`MockShell`] — records calls and returns configurable results; intended for unit tests.
-//! - [`scripted::ScriptedShell`] — drives the real spinner overlay using pre-configured output
-//!   scripts; intended for overlay integration tests.
+//! - [`scripted::OverlayScriptedShell`] — drives the real spinner overlay using pre-configured
+//!   output scripts; intended for overlay integration tests. Only `run_command` is scripted — every
+//!   other [`Shell`] method panics.
 //!
 //! Use [`create`] to get a boxed `Shell` at runtime based on a `dry_run` flag.
 

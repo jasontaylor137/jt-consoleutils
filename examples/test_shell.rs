@@ -13,7 +13,7 @@ use jt_consoleutils::{
    output::{ConsoleOutput, OutputMode},
    shell::{
       Shell,
-      scripted::{Script, ScriptedShell}
+      scripted::{OverlayScriptedShell, Script}
    },
    terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW}
 };
@@ -88,7 +88,7 @@ fn rainbow(text: &str, hue_offset_deg: f32, width: usize) -> String {
 
 /// Run a pre-built `Script` as a labelled overlay step.
 fn run(label: &str, script: Script, output: &mut ConsoleOutput, mode: OutputMode) {
-   let _ = ScriptedShell::new().push(script).run_command(label, "", &[], output, mode);
+   let _ = OverlayScriptedShell::new().push(script).run_command(label, "", &[], output, mode);
 }
 
 // ---------------------------------------------------------------------------

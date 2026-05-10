@@ -1,10 +1,18 @@
-//! Scripted shell for driving the spinner overlay in tests without spawning real OS processes.
+//! Overlay-scripted shell for driving the spinner overlay in tests without spawning real OS
+//! processes.
 //!
-//! [`ScriptedShell`] and [`Script`] are intended for **testing use**. They are not gated behind
-//! `#[cfg(test)]` so that downstream crates can use them in their own test suites, but they carry
-//! no meaningful runtime cost in production builds (LTO eliminates unused code).
+//! [`OverlayScriptedShell`] is a **narrow** test double: it only scripts [`Shell::run_command`].
+//! Every other [`Shell`] method panics — see the type-level docs for the rationale and the
+//! recommended composition pattern with [`MockShell`].
 //!
-//! Use [`ScriptedShell::with_config`] to customise overlay behaviour (e.g. viewport height).
+//! [`OverlayScriptedShell`] and [`Script`] are intended for **testing use**. They are not gated
+//! behind `#[cfg(test)]` so that downstream crates can use them in their own test suites, but
+//! they carry no meaningful runtime cost in production builds (LTO eliminates unused code).
+//!
+//! Use [`OverlayScriptedShell::with_config`] to customise overlay behaviour (e.g. viewport
+//! height).
+//!
+//! [`MockShell`]: super::MockShell
 #![allow(dead_code)]
 
 use std::{cell::RefCell, collections::VecDeque, sync::mpsc, thread, time::Duration};
@@ -29,12 +37,12 @@ enum ScriptEvent {
 // Script builder
 // ---------------------------------------------------------------------------
 
-/// A sequence of stdout/stderr events and delays that [`ScriptedShell`] replays
-/// through the spinner overlay renderer.
+/// A sequence of stdout/stderr events and delays that [`OverlayScriptedShell`]
+/// replays through the spinner overlay renderer.
 ///
 /// Build one with the fluent builder methods ([`Script::out`], [`Script::err`],
-/// [`Script::delay_ms`], etc.) and enqueue it on a [`ScriptedShell`] via
-/// [`ScriptedShell::push`].
+/// [`Script::delay_ms`], etc.) and enqueue it on an [`OverlayScriptedShell`] via
+/// [`OverlayScriptedShell::push`].
 ///
 /// Intended for **testing use**.
 pub struct Script {
@@ -134,32 +142,52 @@ impl Script {
 }
 
 // ---------------------------------------------------------------------------
-// ScriptedShell
+// OverlayScriptedShell
 // ---------------------------------------------------------------------------
 
-/// A [`Shell`] implementation that drives the real spinner overlay using
+/// A narrow [`Shell`] test double that drives the real spinner overlay using
 /// pre-configured output scripts. No OS processes are spawned.
 ///
-/// Intended for **testing use**. Enqueue one [`Script`] per expected
-/// [`Shell::run_command`] call via [`ScriptedShell::push`]; each call pops the
-/// front script and replays its events through the live overlay renderer,
-/// letting you write overlay integration tests without real subprocesses.
+/// Intended for **overlay integration tests**. Enqueue one [`Script`] per
+/// expected [`Shell::run_command`] call via [`OverlayScriptedShell::push`];
+/// each call pops the front script and replays its events through the live
+/// overlay renderer.
 ///
-/// Use [`ScriptedShell::with_config`] to supply a custom [`ShellConfig`]
-/// (e.g. to change the overlay viewport height).
-pub struct ScriptedShell {
+/// # Scope: only `run_command` is scripted
+///
+/// `OverlayScriptedShell` exists to exercise the overlay renderer end-to-end.
+/// It does **not** script any other [`Shell`] method:
+///
+/// - [`Shell::shell_exec`]
+/// - [`Shell::command_exists`]
+/// - [`Shell::command_output`]
+/// - [`Shell::exec_capture`]
+/// - [`Shell::exec_interactive`]
+///
+/// Calling any of those panics with an explanatory message. If your test
+/// needs both overlay-rendered `run_command` calls **and** other
+/// `Shell` methods, compose your own `Shell` impl that delegates `run_command`
+/// to an `OverlayScriptedShell` and the rest to a [`MockShell`] (or to bespoke
+/// recorded behaviour). A general-purpose "scripts everything" shell is out of
+/// scope for this type.
+///
+/// Use [`OverlayScriptedShell::with_config`] to supply a custom
+/// [`ShellConfig`] (e.g. to change the overlay viewport height).
+///
+/// [`MockShell`]: super::MockShell
+pub struct OverlayScriptedShell {
    scripts: RefCell<VecDeque<Script>>,
    config: ShellConfig
 }
 
-impl Default for ScriptedShell {
+impl Default for OverlayScriptedShell {
    fn default() -> Self {
       Self::new()
    }
 }
 
-impl ScriptedShell {
-   /// Create a new `ScriptedShell` with an empty script queue and default config.
+impl OverlayScriptedShell {
+   /// Create a new `OverlayScriptedShell` with an empty script queue and default config.
    #[must_use]
    pub fn new() -> Self {
       Self { scripts: RefCell::new(VecDeque::new()), config: ShellConfig::default() }
@@ -180,7 +208,7 @@ impl ScriptedShell {
    }
 }
 
-impl Shell for ScriptedShell {
+impl Shell for OverlayScriptedShell {
    fn run_command(
       &self,
       label: &str,
@@ -189,8 +217,11 @@ impl Shell for ScriptedShell {
       output: &mut dyn Output,
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
-      let script =
-         self.scripts.borrow_mut().pop_front().expect("ScriptedShell: run_command called but script queue is empty");
+      let script = self
+         .scripts
+         .borrow_mut()
+         .pop_front()
+         .expect("OverlayScriptedShell: run_command called but script queue is empty");
 
       let (tx, rx) = mpsc::channel::<Line>();
       let success = script.success;
@@ -229,15 +260,15 @@ impl Shell for ScriptedShell {
       _output: &mut dyn Output,
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
-      Ok(CommandResult { success: true, code: None, stderr: String::new() })
+      panic!("{}", unsupported("shell_exec"))
    }
 
    fn command_exists(&self, _program: &str) -> bool {
-      true
+      panic!("{}", unsupported("command_exists"))
    }
 
    fn command_output(&self, _program: &str, _args: &[&str]) -> Result<String, ShellError> {
-      Ok(String::new())
+      panic!("{}", unsupported("command_output"))
    }
 
    fn exec_capture(
@@ -246,12 +277,19 @@ impl Shell for ScriptedShell {
       _output: &mut dyn Output,
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
-      Ok(CommandResult { success: true, code: None, stderr: String::new() })
+      panic!("{}", unsupported("exec_capture"))
    }
 
    fn exec_interactive(&self, _cmd: &str, _output: &mut dyn Output, _mode: OutputMode) -> Result<(), ShellError> {
-      Ok(())
+      panic!("{}", unsupported("exec_interactive"))
    }
+}
+
+fn unsupported(method: &str) -> String {
+   format!(
+      "OverlayScriptedShell::{method} is not implemented — this type only scripts run_command. \
+       Compose with MockShell (or your own Shell impl) for other methods."
+   )
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +363,7 @@ fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &mpsc::Sender<Line>) {
 mod tests {
    use std::sync::mpsc;
 
-   use super::{Line, Script, ScriptedShell, feed};
+   use super::{Line, OverlayScriptedShell, Script, feed};
    use crate::{
       output::{OutputMode, StringOutput},
       shell::{Shell, ShellConfig}
@@ -496,12 +534,12 @@ mod tests {
    }
 
    // -----------------------------------------------------------------------
-   // ScriptedShell — run_command result
+   // OverlayScriptedShell — run_command result
    // -----------------------------------------------------------------------
 
    #[test]
    fn scripted_shell_success_result() {
-      let shell = ScriptedShell::new().push(Script::new().out_line("step done"));
+      let shell = OverlayScriptedShell::new().push(Script::new().out_line("step done"));
       let mut out = StringOutput::new();
       let result = shell.run_command("build", "unused", &[], &mut out, default_mode()).unwrap();
       assert!(result.success);
@@ -509,7 +547,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_failure_result() {
-      let shell = ScriptedShell::new().push(Script::new().err_line("something broke").exit_failure());
+      let shell = OverlayScriptedShell::new().push(Script::new().err_line("something broke").exit_failure());
       let mut out = StringOutput::new();
       let result = shell.run_command("deploy", "unused", &[], &mut out, default_mode()).unwrap();
       assert!(!result.success);
@@ -517,7 +555,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_stderr_captured_in_result() {
-      let shell = ScriptedShell::new().push(Script::new().err_line("warn: low disk").exit_failure());
+      let shell = OverlayScriptedShell::new().push(Script::new().err_line("warn: low disk").exit_failure());
       let mut out = StringOutput::new();
       let result = shell.run_command("check", "unused", &[], &mut out, default_mode()).unwrap();
       assert_eq!(result.stderr, "warn: low disk");
@@ -525,8 +563,8 @@ mod tests {
 
    #[test]
    fn scripted_shell_multiple_stderr_lines_joined() {
-      let shell =
-         ScriptedShell::new().push(Script::new().err_line("error: line 1").err_line("error: line 2").exit_failure());
+      let shell = OverlayScriptedShell::new()
+         .push(Script::new().err_line("error: line 1").err_line("error: line 2").exit_failure());
       let mut out = StringOutput::new();
       let result = shell.run_command("test", "unused", &[], &mut out, default_mode()).unwrap();
       assert_eq!(result.stderr, "error: line 1\nerror: line 2");
@@ -534,7 +572,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_step_result_written_to_output() {
-      let shell = ScriptedShell::new().push(Script::new().out_line("ok"));
+      let shell = OverlayScriptedShell::new().push(Script::new().out_line("ok"));
       let mut out = StringOutput::new();
       shell.run_command("mytask", "unused", &[], &mut out, default_mode()).unwrap();
       // StringOutput::step_result writes "✓ label (elapsed)"
@@ -544,7 +582,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_failure_step_result_uses_cross() {
-      let shell = ScriptedShell::new().push(Script::new().err_line("bad").exit_failure());
+      let shell = OverlayScriptedShell::new().push(Script::new().err_line("bad").exit_failure());
       let mut out = StringOutput::new();
       shell.run_command("mytask", "unused", &[], &mut out, default_mode()).unwrap();
       assert!(out.log().starts_with('✗'));
@@ -552,7 +590,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_multiple_scripts_consumed_in_order() {
-      let shell = ScriptedShell::new()
+      let shell = OverlayScriptedShell::new()
          .push(Script::new().out_line("first"))
          .push(Script::new().out_line("second").exit_failure());
       let mut out = StringOutput::new();
@@ -566,7 +604,7 @@ mod tests {
 
    #[test]
    fn scripted_shell_empty_queue_panics() {
-      let shell = ScriptedShell::new();
+      let shell = OverlayScriptedShell::new();
       let mut out = StringOutput::new();
       let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
          shell.run_command("oops", "unused", &[], &mut out, default_mode()).unwrap();
@@ -575,53 +613,75 @@ mod tests {
    }
 
    // -----------------------------------------------------------------------
-   // ScriptedShell — other Shell trait methods
+   // OverlayScriptedShell — other Shell trait methods all panic
    // -----------------------------------------------------------------------
 
-   #[test]
-   fn scripted_shell_shell_exec_returns_success() {
-      let shell = ScriptedShell::new();
-      let mut out = StringOutput::new();
-      let result = shell.shell_exec("echo hi", &mut out, default_mode()).unwrap();
-      assert!(result.success);
+   fn assert_panics_with_unsupported<F: FnOnce() + std::panic::UnwindSafe>(method: &str, f: F) {
+      let prev = std::panic::take_hook();
+      std::panic::set_hook(Box::new(|_| {}));
+      let result = std::panic::catch_unwind(f);
+      std::panic::set_hook(prev);
+      let payload = result.expect_err("expected panic");
+      let msg = payload
+         .downcast_ref::<String>()
+         .map(String::as_str)
+         .or_else(|| payload.downcast_ref::<&'static str>().copied())
+         .unwrap_or("");
+      assert!(msg.contains(method), "panic msg `{msg}` should mention `{method}`");
+      assert!(msg.contains("OverlayScriptedShell"), "panic msg `{msg}` should mention `OverlayScriptedShell`");
    }
 
    #[test]
-   fn scripted_shell_command_exists_returns_true() {
-      let shell = ScriptedShell::new();
-      assert!(shell.command_exists("anything"));
+   fn scripted_shell_shell_exec_panics() {
+      assert_panics_with_unsupported("shell_exec", || {
+         let shell = OverlayScriptedShell::new();
+         let mut out = StringOutput::new();
+         let _ = shell.shell_exec("echo hi", &mut out, default_mode());
+      });
    }
 
    #[test]
-   fn scripted_shell_command_output_returns_empty_string() {
-      let shell = ScriptedShell::new();
-      let result = shell.command_output("anything", &["--version"]).unwrap();
-      assert_eq!(result, "");
+   fn scripted_shell_command_exists_panics() {
+      assert_panics_with_unsupported("command_exists", || {
+         let shell = OverlayScriptedShell::new();
+         let _ = shell.command_exists("anything");
+      });
    }
 
    #[test]
-   fn scripted_shell_exec_capture_returns_success() {
-      let shell = ScriptedShell::new();
-      let mut out = StringOutput::new();
-      let result = shell.exec_capture("echo hi", &mut out, default_mode()).unwrap();
-      assert!(result.success);
+   fn scripted_shell_command_output_panics() {
+      assert_panics_with_unsupported("command_output", || {
+         let shell = OverlayScriptedShell::new();
+         let _ = shell.command_output("anything", &["--version"]);
+      });
    }
 
    #[test]
-   fn scripted_shell_exec_interactive_returns_ok() {
-      let shell = ScriptedShell::new();
-      let mut out = StringOutput::new();
-      assert!(shell.exec_interactive("echo hi", &mut out, default_mode()).is_ok());
+   fn scripted_shell_exec_capture_panics() {
+      assert_panics_with_unsupported("exec_capture", || {
+         let shell = OverlayScriptedShell::new();
+         let mut out = StringOutput::new();
+         let _ = shell.exec_capture("echo hi", &mut out, default_mode());
+      });
+   }
+
+   #[test]
+   fn scripted_shell_exec_interactive_panics() {
+      assert_panics_with_unsupported("exec_interactive", || {
+         let shell = OverlayScriptedShell::new();
+         let mut out = StringOutput::new();
+         let _ = shell.exec_interactive("echo hi", &mut out, default_mode());
+      });
    }
 
    // -----------------------------------------------------------------------
-   // ScriptedShell — custom viewport_size via with_config
+   // OverlayScriptedShell — custom viewport_size via with_config
    // -----------------------------------------------------------------------
 
    #[test]
    fn scripted_shell_with_config_accepts_custom_viewport() {
       let config = ShellConfig { viewport_size: 2, shell_program: None };
-      let shell = ScriptedShell::new()
+      let shell = OverlayScriptedShell::new()
          .with_config(config)
          .push(Script::new().out_line("line 1").out_line("line 2").out_line("line 3"));
       let mut out = StringOutput::new();

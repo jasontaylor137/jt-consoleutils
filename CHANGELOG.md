@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING:** `shell::scripted::ScriptedShell` renamed to `OverlayScriptedShell`. The new name reflects the type's narrow scope — it only scripts `Shell::run_command` to drive the spinner overlay. Every other `Shell` method (`shell_exec`, `command_exists`, `command_output`, `exec_capture`, `exec_interactive`) now **panics** with an explanatory message instead of silently returning fake success. Tests that previously relied on the silent stubs were masking misuse; compose `OverlayScriptedShell` with `MockShell` (or your own `Shell` impl) when you need both overlay-rendered `run_command` calls and other shell behaviour.
+
+---
+
 ## [0.5.0] — 2026-05-09
 
 ### Changed
