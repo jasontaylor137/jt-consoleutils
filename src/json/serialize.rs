@@ -9,7 +9,7 @@
 //! `\t`, `\b`, `\f`, and `\u00XX` for other control characters). Non-ASCII
 //! characters are emitted as raw UTF-8 rather than `\uXXXX` escapes.
 
-use super::{escape::push_json_string, value::JsonValue};
+use super::{escape::push_json_string, to_json::push_indent, value::JsonValue};
 
 /// Serialize a `JsonValue` to a pretty-printed JSON string with 2-space indent.
 pub fn to_json_pretty(value: &JsonValue) -> String {
@@ -66,12 +66,6 @@ fn write_value(out: &mut String, value: &JsonValue, indent: usize) {
       JsonValue::Number(s) => out.push_str(s),
       JsonValue::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
       JsonValue::Null => out.push_str("null")
-   }
-}
-
-fn push_indent(out: &mut String, level: usize) {
-   for _ in 0..level {
-      out.push_str("  ");
    }
 }
 

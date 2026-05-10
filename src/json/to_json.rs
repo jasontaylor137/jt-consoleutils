@@ -204,7 +204,7 @@ where
    out.push('}');
 }
 
-fn push_indent(out: &mut String, level: usize) {
+pub(super) fn push_indent(out: &mut String, level: usize) {
    for _ in 0..level {
       out.push_str("  ");
    }
@@ -394,9 +394,7 @@ impl StructSerializer {
          return "{}".to_string();
       }
       self.out.push('\n');
-      for _ in 0..self.indent {
-         self.out.push_str("  ");
-      }
+      push_indent(&mut self.out, self.indent);
       self.out.push('}');
       self.out
    }
@@ -408,9 +406,7 @@ impl StructSerializer {
          self.out.push_str(",\n");
       }
       self.field_count += 1;
-      for _ in 0..(self.indent + 1) {
-         self.out.push_str("  ");
-      }
+      push_indent(&mut self.out, self.indent + 1);
       push_json_string(&mut self.out, key);
       self.out.push_str(": ");
    }
