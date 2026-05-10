@@ -145,16 +145,21 @@ fn ignore_broken_pipe(result: io::Result<()>) -> io::Result<()> {
 /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
 /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
 pub(crate) fn clear_lines(out: &mut io::StdoutLock, n: usize) -> io::Result<()> {
+   ignore_broken_pipe(write_clear_lines(out, n))
+}
+
+/// Raw clear-lines writes — no broken-pipe absorption. Use inside an existing
+/// `ignore_broken_pipe` closure (e.g. [`render_frame`]); otherwise prefer
+/// [`clear_lines`].
+fn write_clear_lines(out: &mut io::StdoutLock, n: usize) -> io::Result<()> {
    if n == 0 {
       return Ok(());
    }
-   ignore_broken_pipe((|| {
-      write!(out, "\x1b[{n}A")?;
-      for _ in 0..n {
-         write!(out, "\r\x1b[K\n")?;
-      }
-      write!(out, "\x1b[{n}A")
-   })())
+   write!(out, "\x1b[{n}A")?;
+   for _ in 0..n {
+      write!(out, "\r\x1b[K\n")?;
+   }
+   write!(out, "\x1b[{n}A")
 }
 
 /// Erase the previous frame (cursor-up + per-line clear), draw the spinner header and
@@ -188,13 +193,7 @@ pub(crate) fn render_frame(
    let rows = 1 + shown.len();
 
    ignore_broken_pipe((|| {
-      if prev_lines > 0 {
-         write!(out, "\x1b[{prev_lines}A")?;
-         for _ in 0..prev_lines {
-            write!(out, "\r\x1b[K\n")?;
-         }
-         write!(out, "\x1b[{prev_lines}A")?;
-      }
+      write_clear_lines(out, prev_lines)?;
 
       let spinner = SPINNER[frame % SPINNER.len()];
       // "⠋ label..." = 1 (spinner) + 1 (space) + label + 3 ("...") = label + 5 visible columns
