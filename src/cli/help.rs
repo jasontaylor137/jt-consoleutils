@@ -6,10 +6,9 @@
 //! print, exit-code choice, and any post-print work to the application's
 //! `main`. This module supplies the two leaf printers that close that loop:
 //!
-//! - [`crate::cli::help::print_help`] — word-wraps to the current terminal
-//!   width, applies the left-to-right rainbow colorizer, and writes to stdout.
-//! - [`crate::cli::help::print_version`] — writes the version string to stdout
-//!   verbatim.
+//! - [`crate::cli::help::print_help`] — word-wraps to the current terminal width, applies the
+//!   left-to-right rainbow colorizer, and writes to stdout.
+//! - [`crate::cli::help::print_version`] — writes the version string to stdout verbatim.
 //!
 //! Neither function exits or returns a status; both are meant to be called
 //! directly when [`CliOutcome::Help`] / [`CliOutcome::Version`] is matched.

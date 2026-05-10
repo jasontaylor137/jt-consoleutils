@@ -477,8 +477,8 @@ mod tests {
    struct Doc(String);
 
    impl ToJson for Doc {
-      fn to_json_pretty(&self) -> String {
-         format!("{{\n  \"k\": \"{}\"\n}}", self.0)
+      fn write_pretty(&self, out: &mut String, _indent: usize) {
+         out.push_str(&format!("{{\n  \"k\": \"{}\"\n}}", self.0));
       }
    }
 

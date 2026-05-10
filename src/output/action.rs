@@ -5,9 +5,9 @@
 //! [`OutputAction`] extension trait pulls the typed entry points (`.action`,
 //! `.summary`) into method-call position on every [`Output`].
 
-use super::Output;
-use super::render::{
-   self, Hint, Note, RenderTheme, count_phrase
+use super::{
+   Output,
+   render::{self, Hint, Note, RenderTheme, count_phrase}
 };
 use crate::vocab::AsNoun;
 

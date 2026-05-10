@@ -1,12 +1,213 @@
+use std::collections::{BTreeMap, HashMap};
+
 use super::escape::push_json_string;
 
-/// Trait for types that can serialize themselves to a pretty JSON string.
-/// This is the typed counterpart to `serialize::to_json_pretty` which operates
-/// on `JsonValue`. Implementing `ToJson` allows structs to skip the intermediate
-/// `JsonValue` representation when all we need is the output string.
+/// Trait for types that can serialize themselves directly to a pretty JSON
+/// string, without first materializing a [`super::JsonValue`].
+///
+/// # `ToJson` vs `From<T> for JsonValue`
+///
+/// - **`From<T> for JsonValue`** — use when you want a typed in-memory value to plug into a larger
+///   [`super::JsonValue`] tree (e.g. `JsonValue::Array(vec![v.into(), ...])`) or to roundtrip
+///   through [`super::to_json_pretty`]. Builds an enum value; no string is produced until you call
+///   `to_json_pretty`.
+/// - **`ToJson`** — use when the destination is *just* a JSON string (writing to a file, building a
+///   config blob). Skips the `JsonValue` allocation and writes straight into the output buffer.
+///
+/// # Implementing for your own types
+///
+/// Implementors only need to provide [`ToJson::write_pretty`]. The default
+/// [`ToJson::to_json_pretty`] handles the top-level `String` allocation.
+/// Use [`StructSerializer::at`] inside `write_pretty` so nested objects pick
+/// up the surrounding indent level:
+///
+/// ```
+/// use jt_consoleutils::json::{StructSerializer, ToJson};
+///
+/// struct Build { name: String, count: i64, tags: Vec<String> }
+///
+/// impl ToJson for Build {
+///    fn write_pretty(&self, out: &mut String, indent: usize) {
+///       let mut s = StructSerializer::at(indent);
+///       s.field_str("name", &self.name);
+///       s.field_i64("count", self.count);
+///       s.field("tags", &self.tags);
+///       out.push_str(&s.finish());
+///    }
+/// }
+///
+/// let b = Build { name: "deploy".into(), count: 1, tags: vec!["beta".into()] };
+/// assert_eq!(
+///    b.to_json_pretty(),
+///    "{\n  \"name\": \"deploy\",\n  \"count\": 1,\n  \"tags\": [\n    \"beta\"\n  ]\n}"
+/// );
+/// ```
+///
+/// Blanket impls cover the std types you'd typically reach for (`String`,
+/// `&str`, `bool`, `i64`, `f64`, `Option<T>`, `Vec<T>`, `[T]`, and the two
+/// string-keyed map types), so a `Vec<MyStruct>` or `Option<MyStruct>` field
+/// serializes through `ToJson` without a hand-rolled wrapper.
 pub trait ToJson {
-   /// Serialize `self` directly to a pretty-printed JSON string.
-   fn to_json_pretty(&self) -> String;
+   /// Append the value's pretty-printed JSON to `out`. `indent` is the indent
+   /// level of the *current line position* — i.e. an object's closing `}` will
+   /// be written at `indent`, and its fields one level deeper.
+   fn write_pretty(&self, out: &mut String, indent: usize);
+
+   /// Serialize `self` to a pretty-printed JSON string.
+   fn to_json_pretty(&self) -> String {
+      let mut out = String::new();
+      self.write_pretty(&mut out, 0);
+      out
+   }
+}
+
+// ---------------------------------------------------------------------------
+// Blanket impls for std types
+// ---------------------------------------------------------------------------
+
+impl ToJson for str {
+   fn write_pretty(&self, out: &mut String, _indent: usize) {
+      push_json_string(out, self);
+   }
+}
+
+impl ToJson for String {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      self.as_str().write_pretty(out, indent);
+   }
+}
+
+impl ToJson for bool {
+   fn write_pretty(&self, out: &mut String, _indent: usize) {
+      out.push_str(if *self { "true" } else { "false" });
+   }
+}
+
+impl ToJson for i64 {
+   fn write_pretty(&self, out: &mut String, _indent: usize) {
+      out.push_str(&self.to_string());
+   }
+}
+
+/// **Lossy on non-finite input.** `NaN`/`±∞` serialize as JSON `null`,
+/// matching [`super::JsonValue::from`]`(f64)`.
+impl ToJson for f64 {
+   fn write_pretty(&self, out: &mut String, _indent: usize) {
+      if self.is_finite() {
+         out.push_str(&self.to_string());
+      } else {
+         out.push_str("null");
+      }
+   }
+}
+
+impl<T: ToJson + ?Sized> ToJson for &T {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      (*self).write_pretty(out, indent);
+   }
+}
+
+impl<T: ToJson> ToJson for Option<T> {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      match self {
+         Some(v) => v.write_pretty(out, indent),
+         None => out.push_str("null")
+      }
+   }
+}
+
+impl<T: ToJson> ToJson for [T] {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      write_array(out, indent, self.iter());
+   }
+}
+
+impl<T: ToJson> ToJson for Vec<T> {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      self.as_slice().write_pretty(out, indent);
+   }
+}
+
+/// `BTreeMap` already iterates in sorted-key order, matching the rest of the
+/// crate's JSON output.
+impl<T: ToJson> ToJson for BTreeMap<String, T> {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      write_object(out, indent, self.iter().map(|(k, v)| (k.as_str(), v)));
+   }
+}
+
+/// Keys are sorted before emission so output stays stable across runs (and
+/// matches the [`BTreeMap`] impl).
+impl<T: ToJson> ToJson for HashMap<String, T> {
+   fn write_pretty(&self, out: &mut String, indent: usize) {
+      let mut keys: Vec<&String> = self.keys().collect();
+      keys.sort();
+      write_object(out, indent, keys.into_iter().map(|k| (k.as_str(), &self[k])));
+   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared array/object writers
+// ---------------------------------------------------------------------------
+
+fn write_array<'a, T, I>(out: &mut String, indent: usize, items: I)
+where
+   T: ToJson + 'a,
+   I: IntoIterator<Item = &'a T>
+{
+   let mut iter = items.into_iter().peekable();
+   if iter.peek().is_none() {
+      out.push_str("[]");
+      return;
+   }
+   out.push_str("[\n");
+   let inner = indent + 1;
+   let mut first = true;
+   for v in iter {
+      if !first {
+         out.push_str(",\n");
+      }
+      first = false;
+      push_indent(out, inner);
+      v.write_pretty(out, inner);
+   }
+   out.push('\n');
+   push_indent(out, indent);
+   out.push(']');
+}
+
+fn write_object<'a, T, I>(out: &mut String, indent: usize, entries: I)
+where
+   T: ToJson + 'a,
+   I: IntoIterator<Item = (&'a str, &'a T)>
+{
+   let mut iter = entries.into_iter().peekable();
+   if iter.peek().is_none() {
+      out.push_str("{}");
+      return;
+   }
+   out.push_str("{\n");
+   let inner = indent + 1;
+   let mut first = true;
+   for (k, v) in iter {
+      if !first {
+         out.push_str(",\n");
+      }
+      first = false;
+      push_indent(out, inner);
+      push_json_string(out, k);
+      out.push_str(": ");
+      v.write_pretty(out, inner);
+   }
+   out.push('\n');
+   push_indent(out, indent);
+   out.push('}');
+}
+
+fn push_indent(out: &mut String, level: usize) {
+   for _ in 0..level {
+      out.push_str("  ");
+   }
 }
 
 // ---------------------------------------------------------------------------
@@ -57,13 +258,13 @@ impl Default for StructSerializer {
 impl StructSerializer {
    /// Create a new top-level serializer.
    pub fn new() -> Self {
-      Self::nested(0)
+      Self::at(0)
    }
 
-   /// Internal: create a serializer whose closing brace lives at `indent`.
-   /// Used by `field_object` to construct a child serializer that shares the
-   /// parent's indent semantics.
-   fn nested(indent: usize) -> Self {
+   /// Create a serializer whose closing brace lives at `indent`. Use this
+   /// inside [`ToJson::write_pretty`] so nested values pick up the surrounding
+   /// indent level.
+   pub fn at(indent: usize) -> Self {
       StructSerializer { out: String::from("{\n"), field_count: 0, indent }
    }
 
@@ -147,7 +348,7 @@ impl StructSerializer {
    /// Empty closures emit `"{}"`.
    pub fn field_object<F: FnOnce(&mut StructSerializer)>(&mut self, key: &str, build: F) {
       self.write_separator_and_key(key);
-      let mut child = StructSerializer::nested(self.indent + 1);
+      let mut child = StructSerializer::at(self.indent + 1);
       build(&mut child);
       self.out.push_str(&child.finish());
    }
@@ -163,34 +364,25 @@ impl StructSerializer {
       }
    }
 
+   // -- generic ToJson fields ----------------------------------------------
+
+   /// Write any [`ToJson`] value as a field. Use this for nested user types,
+   /// `Vec<T>`, `Option<T>`, etc.
+   pub fn field<T: ToJson + ?Sized>(&mut self, key: &str, value: &T) {
+      self.write_separator_and_key(key);
+      value.write_pretty(&mut self.out, self.indent + 1);
+   }
+
    // -- arrays --------------------------------------------------------------
 
    /// Write an array of strings. Empty arrays emit `"[]"`.
    pub fn field_array_str(&mut self, key: &str, values: &[String]) {
-      self.write_separator_and_key(key);
-      if values.is_empty() {
-         self.out.push_str("[]");
-         return;
-      }
-      self.out.push_str("[\n");
-      let item_indent = self.indent + 2;
-      let close_indent = self.indent + 1;
-      let mut first = true;
-      for v in values {
-         if !first {
-            self.out.push_str(",\n");
-         }
-         first = false;
-         for _ in 0..item_indent {
-            self.out.push_str("  ");
-         }
-         push_json_string(&mut self.out, v);
-      }
-      self.out.push('\n');
-      for _ in 0..close_indent {
-         self.out.push_str("  ");
-      }
-      self.out.push(']');
+      self.field(key, values);
+   }
+
+   /// Write an array of any [`ToJson`] values. Empty arrays emit `"[]"`.
+   pub fn field_array<T: ToJson>(&mut self, key: &str, values: &[T]) {
+      self.field(key, values);
    }
 
    // -- finish --------------------------------------------------------------
@@ -394,5 +586,130 @@ mod tests {
       let mut s = StructSerializer::new();
       s.field_str("a\"b", "v");
       assert_eq!(s.finish(), "{\n  \"a\\\"b\": \"v\"\n}");
+   }
+
+   // -- blanket ToJson impls --------------------------------------------------
+
+   #[test]
+   fn to_json_for_str_quotes_and_escapes() {
+      assert_eq!("hi".to_json_pretty(), "\"hi\"");
+      assert_eq!("a\"b".to_json_pretty(), "\"a\\\"b\"");
+   }
+
+   #[test]
+   fn to_json_for_string_matches_str() {
+      assert_eq!(String::from("hi").to_json_pretty(), "\"hi\"");
+   }
+
+   #[test]
+   fn to_json_for_bool() {
+      assert_eq!(true.to_json_pretty(), "true");
+      assert_eq!(false.to_json_pretty(), "false");
+   }
+
+   #[test]
+   fn to_json_for_i64() {
+      assert_eq!(42_i64.to_json_pretty(), "42");
+      assert_eq!((-7_i64).to_json_pretty(), "-7");
+   }
+
+   #[test]
+   fn to_json_for_f64_finite() {
+      assert_eq!(0.5_f64.to_json_pretty(), "0.5");
+   }
+
+   #[test]
+   fn to_json_for_f64_non_finite_is_null() {
+      assert_eq!(f64::NAN.to_json_pretty(), "null");
+      assert_eq!(f64::INFINITY.to_json_pretty(), "null");
+   }
+
+   #[test]
+   fn to_json_for_option_some_delegates() {
+      assert_eq!(Some(42_i64).to_json_pretty(), "42");
+   }
+
+   #[test]
+   fn to_json_for_option_none_is_null() {
+      let v: Option<i64> = None;
+      assert_eq!(v.to_json_pretty(), "null");
+   }
+
+   #[test]
+   fn to_json_for_empty_vec_is_brackets() {
+      let v: Vec<i64> = vec![];
+      assert_eq!(v.to_json_pretty(), "[]");
+   }
+
+   #[test]
+   fn to_json_for_vec_of_strings() {
+      let v = vec!["a".to_string(), "b".to_string()];
+      assert_eq!(v.to_json_pretty(), "[\n  \"a\",\n  \"b\"\n]");
+   }
+
+   #[test]
+   fn to_json_for_vec_of_user_type_recurses() {
+      struct Item(i64);
+      impl ToJson for Item {
+         fn write_pretty(&self, out: &mut String, indent: usize) {
+            let mut s = StructSerializer::at(indent);
+            s.field_i64("n", self.0);
+            out.push_str(&s.finish());
+         }
+      }
+      let v = vec![Item(1), Item(2)];
+      assert_eq!(v.to_json_pretty(), "[\n  {\n    \"n\": 1\n  },\n  {\n    \"n\": 2\n  }\n]");
+   }
+
+   #[test]
+   fn to_json_for_btreemap_emits_sorted_object() {
+      let mut m: BTreeMap<String, i64> = BTreeMap::new();
+      m.insert("b".into(), 2);
+      m.insert("a".into(), 1);
+      assert_eq!(m.to_json_pretty(), "{\n  \"a\": 1,\n  \"b\": 2\n}");
+   }
+
+   #[test]
+   fn to_json_for_hashmap_sorts_keys() {
+      let mut m: HashMap<String, i64> = HashMap::new();
+      m.insert("b".into(), 2);
+      m.insert("a".into(), 1);
+      assert_eq!(m.to_json_pretty(), "{\n  \"a\": 1,\n  \"b\": 2\n}");
+   }
+
+   #[test]
+   fn to_json_for_empty_map_is_braces() {
+      let m: BTreeMap<String, i64> = BTreeMap::new();
+      assert_eq!(m.to_json_pretty(), "{}");
+   }
+
+   #[test]
+   fn struct_serializer_field_generic_handles_vec() {
+      let mut s = StructSerializer::new();
+      s.field_str("name", "x");
+      s.field("tags", &vec!["a".to_string(), "b".to_string()]);
+      assert_eq!(s.finish(), "{\n  \"name\": \"x\",\n  \"tags\": [\n    \"a\",\n    \"b\"\n  ]\n}");
+   }
+
+   #[test]
+   fn struct_serializer_field_generic_handles_option_some() {
+      let mut s = StructSerializer::new();
+      s.field("count", &Some(7_i64));
+      assert_eq!(s.finish(), "{\n  \"count\": 7\n}");
+   }
+
+   #[test]
+   fn struct_serializer_field_array_with_user_type() {
+      struct Item(i64);
+      impl ToJson for Item {
+         fn write_pretty(&self, out: &mut String, indent: usize) {
+            let mut s = StructSerializer::at(indent);
+            s.field_i64("n", self.0);
+            out.push_str(&s.finish());
+         }
+      }
+      let mut s = StructSerializer::new();
+      s.field_array("items", &[Item(1), Item(2)]);
+      assert_eq!(s.finish(), "{\n  \"items\": [\n    {\n      \"n\": 1\n    },\n    {\n      \"n\": 2\n    }\n  ]\n}");
    }
 }

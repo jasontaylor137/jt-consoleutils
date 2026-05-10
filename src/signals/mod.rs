@@ -3,14 +3,12 @@
 //! Two distinct, mutually exclusive APIs live in submodules — pick one per
 //! process, since both target the same kernel-level SIGINT slot:
 //!
-//! - [`crate::signals::parent`] — install a no-op SIGINT handler so the
-//!   parent CLI survives Ctrl+C and reaches its post-run cleanup code while
-//!   the spawned child exits on its own. Use this for tools that wrap a
-//!   child process.
-//! - [`crate::signals::interrupt`] — install a handler that flips a global
-//!   flag so long-running in-process loops can poll
-//!   [`crate::signals::interrupt::is_interrupted`] and exit cooperatively.
-//!   Use this for in-process work loops.
+//! - [`crate::signals::parent`] — install a no-op SIGINT handler so the parent CLI survives Ctrl+C
+//!   and reaches its post-run cleanup code while the spawned child exits on its own. Use this for
+//!   tools that wrap a child process.
+//! - [`crate::signals::interrupt`] — install a handler that flips a global flag so long-running
+//!   in-process loops can poll [`crate::signals::interrupt::is_interrupted`] and exit
+//!   cooperatively. Use this for in-process work loops.
 //!
 //! Both functions share a single install latch
 //! ([`crate::signals::SignalInstallError`]): whichever is called first wins,
@@ -36,10 +34,10 @@
 pub mod interrupt;
 pub mod parent;
 
+use std::sync::atomic::{AtomicU8, Ordering};
+
 pub use interrupt::{install_interrupt_handler, is_interrupted, reset_interrupt};
 pub use parent::{SigintDefaultGuard, install_parent_handlers};
-
-use std::sync::atomic::{AtomicU8, Ordering};
 
 /// Returned when a second SIGINT handler install is attempted. The two install
 /// functions in this module are mutually exclusive — both target the same

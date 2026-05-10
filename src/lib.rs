@@ -15,9 +15,9 @@
 //!   trait's methods are all blocking. Async consumers should use
 //!   [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/) directly
 //!   or define their own future-returning shell trait.
-//! - **No `no_std` support, and none planned.** The crate uses
-//!   `std::process`, `std::fs`, `std::io`, threads, and `std::time`
-//!   throughout; an embedded port would be a near-total rewrite.
+//! - **No `no_std` support, and none planned.** The crate uses `std::process`, `std::fs`,
+//!   `std::io`, threads, and `std::time` throughout; an embedded port would be a near-total
+//!   rewrite.
 //!
 //! # Modules at a glance
 //!

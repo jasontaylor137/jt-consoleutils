@@ -16,11 +16,10 @@
 
 use std::fmt::Write as _;
 
-use super::action::Trailing;
-use crate::terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW};
-
 #[doc(hidden)]
 pub use super::action::OutputAction;
+use super::action::Trailing;
+use crate::terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW};
 
 /// Pluggable glyphs and connector words used by every render function.
 ///

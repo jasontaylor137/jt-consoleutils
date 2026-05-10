@@ -5,9 +5,15 @@
 //! value type.
 //!
 //! For typed deserialization, implement `FromJsonValue` using the provided
-//! helpers (`require_string`, `optional_bool`, etc.).  For typed serialization
-//! without an intermediate `JsonValue`, implement `ToJson` with
-//! `StructSerializer`.
+//! helpers (`require_string`, `optional_bool`, etc.). For typed serialization
+//! without an intermediate `JsonValue`, implement `ToJson` (typically with
+//! help from `StructSerializer`); blanket impls cover `String`, `bool`,
+//! `i64`/`f64`, `Option<T>`, `Vec<T>`, `[T]`, `HashMap<String, T>`, and
+//! `BTreeMap<String, T>`.
+//!
+//! Use `From<T> for JsonValue` when you need an in-memory value to plug into
+//! a larger `JsonValue` tree; use `ToJson` when the destination is just a
+//! JSON string and the intermediate `JsonValue` allocation is wasteful.
 
 mod deserialize;
 mod error;
