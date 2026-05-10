@@ -48,6 +48,7 @@ pub fn colorize_text_with_width(text: &str, rainbow_width: Option<usize>) -> Str
       return text.to_string();
    }
    let rainbow_w = rainbow_width.unwrap_or(max_chars).max(1);
+   debug_assert!(rainbow_w > 0, "palette indexing below requires rainbow_w > 0");
 
    // Per-column RGB palette (12 bytes/entry, no heap-allocated escapes).
    #[allow(clippy::cast_precision_loss)]
