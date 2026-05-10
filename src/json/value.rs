@@ -215,9 +215,16 @@ impl From<i64> for JsonValue {
 }
 
 impl From<f64> for JsonValue {
+   /// **Lossy on non-finite input.** JSON has no native representation for
+   /// `NaN`, `+∞`, or `−∞`, so this infallible conversion silently substitutes
+   /// `JsonValue::Null` for any non-finite value. Note that this differs from
+   /// `serde_json`, which errors on non-finite floats.
+   ///
+   /// We deliberately do not offer a fallible counterpart: an `Err` path would
+   /// pull additional float-handling code into every consumer's binary. Callers
+   /// that must reject non-finite values should check with `f64::is_finite`
+   /// before calling.
    fn from(n: f64) -> Self {
-      // Non-finite values aren't representable in JSON; emit `null` to match
-      // the round-trip behavior callers expect from `serde_json`.
       if n.is_finite() { JsonValue::Number(n.to_string()) } else { JsonValue::Null }
    }
 }

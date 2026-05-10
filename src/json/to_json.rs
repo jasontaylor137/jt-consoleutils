@@ -109,8 +109,16 @@ impl StructSerializer {
       }
    }
 
-   /// Write an `f64` numeric field. Non-finite values (NaN, ±∞) emit `null`
-   /// to match the `JsonValue::from(f64)` round-trip semantics.
+   /// Write an `f64` numeric field. **Lossy on non-finite input:** JSON has
+   /// no native representation for `NaN`, `+∞`, or `−∞`, so this method
+   /// silently emits `null` for those values, matching the lossy
+   /// `JsonValue::from(f64)` conversion. Note that `serde_json` would error
+   /// instead.
+   ///
+   /// A fallible variant is deliberately not offered — an `Err` path would
+   /// pull additional float-handling code into every consumer's binary.
+   /// Callers that must reject non-finite values should check with
+   /// `f64::is_finite` before calling.
    pub fn field_f64(&mut self, key: &str, value: f64) {
       self.write_separator_and_key(key);
       if value.is_finite() {
