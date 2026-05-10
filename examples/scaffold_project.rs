@@ -14,11 +14,18 @@
 //! ```
 
 use std::{
+   error::Error,
    fmt::Write as FmtWrite,
    fs,
-   path::{Path, PathBuf},
-   process
+   path::{Path, PathBuf}
 };
+
+/// Boxed error type for the example. Lets every helper return `Result<_, _>`
+/// and propagate via `?`, so `main` itself never calls `process::exit` —
+/// returning `Err` from `main` makes Cargo print the error and exit with
+/// status 1. This mirrors the pattern `parse_cli` adopted in 0.5: the
+/// **application** owns exit codes; library/example code just returns `Result`.
+type BoxError = Box<dyn Error>;
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -29,7 +36,9 @@ struct Args {
    force: bool
 }
 
-fn parse_args() -> Result<Args, String> {
+/// `Ok(None)` means `--help` was requested; the caller should print help and
+/// exit normally. `Err` means a real failure (unknown flag, missing value).
+fn parse_args() -> Result<Option<Args>, BoxError> {
    let raw: Vec<String> = std::env::args().skip(1).collect();
    let mut project_dir: Option<PathBuf> = None;
    let mut force = false;
@@ -45,12 +54,9 @@ fn parse_args() -> Result<Args, String> {
          "--force" => {
             force = true;
          }
-         "--help" | "-h" => {
-            print_help();
-            process::exit(0);
-         }
+         "--help" | "-h" => return Ok(None),
          other => {
-            return Err(format!("Unknown argument: {other}"));
+            return Err(format!("Unknown argument: {other}").into());
          }
       }
       i += 1;
@@ -58,7 +64,7 @@ fn parse_args() -> Result<Args, String> {
 
    let project_dir = project_dir.ok_or("--project-dir is required")?;
 
-   Ok(Args { project_dir, force })
+   Ok(Some(Args { project_dir, force }))
 }
 
 fn print_help() {
@@ -88,7 +94,7 @@ struct ProjectConfig {
    windows_exe: bool
 }
 
-fn parse_cargo_toml(project_dir: &Path) -> Result<ProjectConfig, String> {
+fn parse_cargo_toml(project_dir: &Path) -> Result<ProjectConfig, BoxError> {
    let cargo_toml_path = project_dir.join("Cargo.toml");
    let content =
       fs::read_to_string(&cargo_toml_path).map_err(|e| format!("Failed to read {}: {e}", cargo_toml_path.display()))?;
@@ -100,7 +106,7 @@ fn parse_cargo_toml(project_dir: &Path) -> Result<ProjectConfig, String> {
 }
 
 /// Returns the first `[[bin]]` `name` value, or `[package]` `name` as fallback.
-fn parse_binary_name(toml: &str) -> Result<String, String> {
+fn parse_binary_name(toml: &str) -> Result<String, BoxError> {
    // Look for a [[bin]] section first.
    // We scan for the pattern:    name = "..."   that follows a [[bin]] header.
    let mut in_bin_section = false;
@@ -135,7 +141,7 @@ fn parse_binary_name(toml: &str) -> Result<String, String> {
       }
    }
 
-   Err("Could not determine binary name from Cargo.toml (no [[bin]] name or [package] name found)".to_string())
+   Err("Could not determine binary name from Cargo.toml (no [[bin]] name or [package] name found)".into())
 }
 
 /// Returns true if the Cargo.toml contains a `[target.'cfg(windows)'.dependencies]` section.
@@ -211,23 +217,13 @@ fn generate_rel_sh(config: &ProjectConfig) -> String {
 // Main
 // ---------------------------------------------------------------------------
 
-fn main() {
-   let args = match parse_args() {
-      Ok(a) => a,
-      Err(e) => {
-         eprintln!("Error: {e}");
-         eprintln!("Run with --help for usage.");
-         process::exit(1);
-      }
+fn main() -> Result<(), BoxError> {
+   let Some(args) = parse_args()? else {
+      print_help();
+      return Ok(());
    };
 
-   let config = match parse_cargo_toml(&args.project_dir) {
-      Ok(c) => c,
-      Err(e) => {
-         eprintln!("Error: {e}");
-         process::exit(1);
-      }
-   };
+   let config = parse_cargo_toml(&args.project_dir)?;
 
    println!("Inferred binary name : {}", config.binary_name);
    println!("Windows .exe support : {}", config.windows_exe);
@@ -239,8 +235,8 @@ fn main() {
    let build_rs_content = generate_build_rs();
    let rel_sh_content = generate_rel_sh(&config);
 
-   write_file(&build_rs_path, &build_rs_content, args.force);
-   write_file(&rel_sh_path, &rel_sh_content, args.force);
+   write_file(&build_rs_path, &build_rs_content, args.force)?;
+   write_file(&rel_sh_path, &rel_sh_content, args.force)?;
 
    // Make rel.sh executable on Unix
    #[cfg(unix)]
@@ -265,18 +261,16 @@ fn main() {
    println!("  2. Use the env vars in your application:");
    println!("       const BUILD_DATE: &str = env!(\"BUILD_DATE\");");
    println!("       const GIT_HASH:   &str = env!(\"GIT_HASH\");");
+
+   Ok(())
 }
 
-fn write_file(path: &PathBuf, content: &str, force: bool) {
+fn write_file(path: &PathBuf, content: &str, force: bool) -> Result<(), BoxError> {
    if path.exists() && !force {
       println!("Skipping {} (already exists, use --force to overwrite)", path.display());
-      return;
+      return Ok(());
    }
-   match fs::write(path, content) {
-      Ok(_) => println!("Wrote {}", path.display()),
-      Err(e) => {
-         eprintln!("Failed to write {}: {e}", path.display());
-         process::exit(1);
-      }
-   }
+   fs::write(path, content).map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+   println!("Wrote {}", path.display());
+   Ok(())
 }
