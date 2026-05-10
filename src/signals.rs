@@ -51,9 +51,11 @@ impl Drop for SigintDefaultGuard {
 
 fn set_sigint_ignored(ignored: bool) {
    #[cfg(unix)]
-   unsafe {
+   {
       let handler = if ignored { libc::SIG_IGN } else { libc::SIG_DFL };
-      libc::signal(libc::SIGINT, handler);
+      // SAFETY: install_sigint_action only touches SIGINT with a libc-provided
+      // handler value (SIG_IGN / SIG_DFL); both are valid for any signal slot.
+      unsafe { install_sigint_action(handler) };
    }
 
    #[cfg(windows)]
@@ -62,6 +64,34 @@ fn set_sigint_ignored(ignored: bool) {
       // Passing a null handler with TRUE installs the "ignore Ctrl+C" filter;
       // FALSE removes it so the default terminate-on-Ctrl+C behavior returns.
       SetConsoleCtrlHandler(None, if ignored { 1 } else { 0 });
+   }
+}
+
+/// Atomically swap SIGINT's disposition via `sigaction(2)`.
+///
+/// Replaces the older `signal(2)` API: `signal()` is a single call that mixes
+/// "look up old" with "install new", which races against signals delivered or
+/// installs done on other threads between those two operations. `sigaction()`
+/// performs the swap atomically inside the kernel and is the POSIX-blessed
+/// replacement.
+///
+/// `SA_RESTART` keeps interrupted slow syscalls (`read`, `write`, …) from
+/// returning `EINTR`, matching the implicit behavior of `signal()` on most
+/// modern systems and what callers of this crate expect.
+///
+/// # Safety
+///
+/// `handler` must be a valid value for `sa_sigaction` — i.e. `SIG_IGN`,
+/// `SIG_DFL`, or a function pointer cast to `sighandler_t` whose function is
+/// safe to call from a signal context (async-signal-safe).
+#[cfg(unix)]
+unsafe fn install_sigint_action(handler: libc::sighandler_t) {
+   unsafe {
+      let mut action: libc::sigaction = std::mem::zeroed();
+      action.sa_sigaction = handler;
+      action.sa_flags = libc::SA_RESTART;
+      libc::sigemptyset(&mut action.sa_mask);
+      libc::sigaction(libc::SIGINT, &action, std::ptr::null_mut());
    }
 }
 
@@ -87,8 +117,12 @@ static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 /// Safe to call exactly once at startup.
 pub fn install_interrupt_handler() {
    #[cfg(unix)]
-   unsafe {
-      libc::signal(libc::SIGINT, handle_sigint as *const () as libc::sighandler_t);
+   {
+      // SAFETY: handle_sigint is async-signal-safe — it only does an atomic
+      // store on a static AtomicBool. Cast to sighandler_t per the libc ABI.
+      unsafe {
+         install_sigint_action(handle_sigint as *const () as libc::sighandler_t);
+      }
    }
 
    #[cfg(windows)]
@@ -146,5 +180,28 @@ mod tests {
       assert!(is_interrupted());
       reset_interrupt();
       assert!(!is_interrupted());
+   }
+
+   /// End-to-end check that the sigaction-installed handler actually fires:
+   /// install, raise SIGINT into our own process, observe the flag flip.
+   /// Runs unix-only; restores SIG_IGN on exit so the test harness isn't
+   /// killed by a stray signal from a sibling test.
+   #[cfg(unix)]
+   #[test]
+   fn sigaction_handler_flips_interrupted_flag() {
+      reset_interrupt();
+      install_interrupt_handler();
+
+      // SAFETY: raise() with a valid signal number is always defined.
+      let rc = unsafe { libc::raise(libc::SIGINT) };
+      assert_eq!(rc, 0, "raise(SIGINT) failed");
+
+      // The handler is synchronous on the raising thread, so the store has
+      // already happened by the time raise() returns.
+      assert!(is_interrupted(), "handler did not flip the flag");
+
+      // Leave the slot in a benign state for any later tests.
+      reset_interrupt();
+      set_sigint_ignored(true);
    }
 }
