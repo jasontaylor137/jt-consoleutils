@@ -22,20 +22,16 @@ pub mod dry;
 // FsError
 // ---------------------------------------------------------------------------
 
-/// Unified filesystem-layer error. Covers raw I/O, contextualized
-/// reads/writes/removes/chmods, and JSON(C) parse failures produced by the
-/// JSON file-reading helpers in this module.
+/// Unified filesystem-layer error. Every variant carries the path that failed
+/// (`Read`, `Write`, `Remove`, `Chmod`, `CreateDir`, `Parse`) so error messages
+/// name the file involved.
 ///
-/// The contextualized variants (`Read`, `Write`, `Remove`, `Chmod`, `Parse`)
-/// carry the path so error messages name the file that failed. The bare
-/// `Io` and `Json` variants exist for `?`-conversion at call sites that
-/// don't have a path on hand; helpers in this module always produce the
-/// contextualized form.
+/// There is intentionally no `From<io::Error>` / `From<JsonError>` impl: that
+/// would let `?` silently produce a path-less error and quietly degrade
+/// diagnostics. Use the constructors (`FsError::read`, `FsError::write`, etc.)
+/// or one of the helpers in this module, which always supply path context.
 #[derive(Debug, thiserror::Error)]
 pub enum FsError {
-   /// Raw I/O error without path context.
-   #[error(transparent)]
-   Io(#[from] io::Error),
    /// Failed to read the file at `path`.
    #[error("read {path}: {source}")]
    Read {
@@ -89,10 +85,7 @@ pub enum FsError {
       /// Underlying JSON error.
       #[source]
       source: JsonError
-   },
-   /// Raw JSON error without path context.
-   #[error(transparent)]
-   Json(#[from] JsonError)
+   }
 }
 
 impl FsError {
