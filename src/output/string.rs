@@ -14,6 +14,10 @@ use super::{DEFAULT_THEME, Output, RenderTheme, format_elapsed};
 /// `is_verbose()` and `is_trace()` both return `true` so that verbose and trace
 /// messages are always captured, allowing tests to assert on their content.
 ///
+/// By default, [`colors_enabled`](Output::colors_enabled) returns `false` so
+/// captured output is plain text. Use [`StringOutput::with_colors`] to opt into
+/// ANSI escape sequences when a test needs to assert on the colored render path.
+///
 /// ```rust
 /// use jt_consoleutils::output::{Output, StringOutput};
 ///
@@ -24,14 +28,17 @@ use super::{DEFAULT_THEME, Output, RenderTheme, format_elapsed};
 pub struct StringOutput {
    buf: String,
    err_buf: String,
-   theme: RenderTheme
+   theme: RenderTheme,
+   colors_enabled: bool
 }
 
 impl StringOutput {
    /// Create a new, empty `StringOutput` using [`DEFAULT_THEME`](crate::output::DEFAULT_THEME).
+   ///
+   /// Colors are disabled by default; use [`StringOutput::with_colors`] to opt in.
    #[must_use]
    pub const fn new() -> Self {
-      Self { buf: String::new(), err_buf: String::new(), theme: DEFAULT_THEME }
+      Self { buf: String::new(), err_buf: String::new(), theme: DEFAULT_THEME, colors_enabled: false }
    }
 
    /// Replace the [`RenderTheme`] used to format glyphs and connector words.
@@ -40,6 +47,17 @@ impl StringOutput {
    #[must_use]
    pub const fn with_theme(mut self, theme: RenderTheme) -> Self {
       self.theme = theme;
+      self
+   }
+
+   /// Opt into ANSI color sequences in captured output.
+   ///
+   /// Builder-style: `StringOutput::new().with_colors(true)`. When enabled,
+   /// [`Output::colors_enabled`] returns `true` and the standard render helpers
+   /// emit ANSI escape codes — useful for asserting on the colored code path.
+   #[must_use]
+   pub const fn with_colors(mut self, enabled: bool) -> Self {
+      self.colors_enabled = enabled;
       self
    }
 
@@ -79,6 +97,10 @@ impl Output for StringOutput {
 
    fn theme(&self) -> RenderTheme {
       self.theme
+   }
+
+   fn colors_enabled(&self) -> bool {
+      self.colors_enabled
    }
 
    #[cfg(feature = "verbose")]
@@ -390,6 +412,35 @@ mod tests {
       // Then
       assert_eq!(out.log(), "✓ Ajouté lodash vers deploy.ts\n✓ Retiré lodash depuis deploy.ts\n");
       assert_eq!(out.err_log(), "⚠ attention : clé inconnue\n");
+   }
+
+   #[test]
+   fn colors_disabled_by_default_emits_plain_state() {
+      let mut out = StringOutput::new();
+      out.state("ready");
+      assert!(!out.colors_enabled());
+      assert_eq!(out.log(), "\u{2022} ready\n");
+   }
+
+   #[test]
+   fn with_colors_emits_ansi_escape_sequences() {
+      // Given
+      let mut out = StringOutput::new().with_colors(true);
+
+      // When
+      out.state("ready");
+      out.warn("careful");
+      out.error("nope");
+
+      // Then
+      assert!(out.colors_enabled());
+      // CYAN \u{1b}[36m, RESET \u{1b}[0m, YELLOW \u{1b}[33m, BOLD \u{1b}[1m, RED \u{1b}[31m
+      assert_eq!(out.log(), "\u{1b}[36m\u{2022}\u{1b}[0m ready\n");
+      assert_eq!(
+         out.err_log(),
+         "\u{1b}[33m\u{26A0}\u{1b}[0m \u{1b}[1mwarn:\u{1b}[0m careful\n\
+          \u{1b}[31m\u{1b}[1m\u{2717}\u{1b}[0m \u{1b}[1merror:\u{1b}[0m nope\n"
+      );
    }
 
    #[test]
