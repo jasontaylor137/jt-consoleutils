@@ -123,41 +123,32 @@ pub trait OutputAction {
    fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_>;
 }
 
-// Two near-identical impls: one for `dyn Output` (which doesn't satisfy
-// `Sized`, so the generic blanket can't cover it) and one for concrete
-// `T: Output`. Bodies delegate to the same helper.
-fn build_action<'a>(out: &'a mut (dyn Output + 'a), verb: &str, subject: &str) -> ActionBuilder<'a> {
-   let colors = out.colors_enabled();
-   let theme = out.theme();
-   let subj = if subject.is_empty() { None } else { Some(subject.to_string()) };
-   ActionBuilder::new(out, verb.to_string(), subj, colors, theme)
+// Two impls are required: one for `dyn Output` (not `Sized`, so the generic
+// blanket can't cover it) and one for concrete `T: Output`. A `?Sized` blanket
+// would collapse them but can't coerce `&mut T` to `&mut dyn Output` without
+// `T: Sized`. The macro below keeps the bodies textually identical so an edit
+// to one form can't drift from the other.
+macro_rules! impl_output_action {
+   ($($head:tt)*) => {
+      $($head)* {
+         fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
+            let colors = self.colors_enabled();
+            let theme = self.theme();
+            let subj = if subject.is_empty() { None } else { Some(subject.to_string()) };
+            ActionBuilder::new(self, verb.as_verb().to_string(), subj, colors, theme)
+         }
+
+         fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
+            let colors = self.colors_enabled();
+            let theme = self.theme();
+            ActionBuilder::new(self, verb.as_verb().to_string(), None, colors, theme)
+         }
+      }
+   };
 }
 
-fn build_summary<'a>(out: &'a mut (dyn Output + 'a), verb: &str) -> ActionBuilder<'a> {
-   let colors = out.colors_enabled();
-   let theme = out.theme();
-   ActionBuilder::new(out, verb.to_string(), None, colors, theme)
-}
-
-impl OutputAction for dyn Output + '_ {
-   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
-      build_action(self, verb.as_verb(), subject)
-   }
-
-   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
-      build_summary(self, verb.as_verb())
-   }
-}
-
-impl<T: Output> OutputAction for T {
-   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
-      build_action(self, verb.as_verb(), subject)
-   }
-
-   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
-      build_summary(self, verb.as_verb())
-   }
-}
+impl_output_action!(impl OutputAction for dyn Output + '_);
+impl_output_action!(impl<T: Output> OutputAction for T);
 
 impl Drop for ActionBuilder<'_> {
    fn drop(&mut self) {
