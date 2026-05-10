@@ -13,8 +13,14 @@ use super::{DEFAULT_THEME, Output, OutputMode, RenderTheme, format_elapsed};
 /// - `verbose`: commands, their arguments, and verbose messages are printed.
 /// - default: normal progress messages are printed; verbose output is hidden.
 ///
-/// Color rendering is determined once at construction:
-/// `colors_enabled = is_terminal(stdout) && NO_COLOR is unset`.
+/// Color rendering is determined once at construction following the
+/// [bixense CLICOLOR spec](https://bixense.com/clicolors/) and the
+/// [NO_COLOR](https://no-color.org/) convention. Precedence (highest first):
+///
+/// 1. `NO_COLOR` set to any value (including empty) → colors off.
+/// 2. `CLICOLOR_FORCE` or `FORCE_COLOR` set to a non-zero, non-empty value → colors on.
+/// 3. `CLICOLOR=0` → colors off.
+/// 4. Otherwise: on iff stdout is a TTY.
 pub struct ConsoleOutput {
    mode: OutputMode,
    colors_enabled: bool,
@@ -50,11 +56,33 @@ impl ConsoleOutput {
 
    fn detect_colors() -> bool {
       use std::io::IsTerminal;
-      if std::env::var_os("NO_COLOR").is_some() {
-         return false;
-      }
-      std::io::stdout().is_terminal()
+      detect_colors_with(
+         |name| std::env::var_os(name).map(|v| v.to_string_lossy().into_owned()),
+         || std::io::stdout().is_terminal()
+      )
    }
+}
+
+/// Pure color-detection logic. `env` returns the value of an env var (or `None`
+/// if unset); `is_tty` reports whether stdout is a terminal. See
+/// [`ConsoleOutput`] for precedence rules.
+fn detect_colors_with(env: impl Fn(&str) -> Option<String>, is_tty: impl FnOnce() -> bool) -> bool {
+   if env("NO_COLOR").is_some() {
+      return false;
+   }
+   if is_force(env("CLICOLOR_FORCE").as_deref()) || is_force(env("FORCE_COLOR").as_deref()) {
+      return true;
+   }
+   if env("CLICOLOR").as_deref() == Some("0") {
+      return false;
+   }
+   is_tty()
+}
+
+/// Whether a `CLICOLOR_FORCE`/`FORCE_COLOR` value should force colors on.
+/// Empty string and `"0"` mean "not forced"; any other value forces.
+fn is_force(val: Option<&str>) -> bool {
+   matches!(val, Some(v) if !v.is_empty() && v != "0")
 }
 
 impl Output for ConsoleOutput {
@@ -181,5 +209,61 @@ mod tests {
    fn console_output_with_colors_enabled() {
       let out = ConsoleOutput::with_colors(OutputMode::default(), true);
       assert!(out.colors_enabled());
+   }
+
+   fn env_from<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+      move |name| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| (*v).to_string())
+   }
+
+   #[test]
+   fn no_color_disables_even_with_force_and_tty() {
+      assert!(!detect_colors_with(env_from(&[("NO_COLOR", "1"), ("CLICOLOR_FORCE", "1")]), || true));
+   }
+
+   #[test]
+   fn no_color_empty_value_still_disables() {
+      assert!(!detect_colors_with(env_from(&[("NO_COLOR", "")]), || true));
+   }
+
+   #[test]
+   fn clicolor_force_enables_on_non_tty() {
+      assert!(detect_colors_with(env_from(&[("CLICOLOR_FORCE", "1")]), || false));
+   }
+
+   #[test]
+   fn force_color_enables_on_non_tty() {
+      assert!(detect_colors_with(env_from(&[("FORCE_COLOR", "1")]), || false));
+   }
+
+   #[test]
+   fn clicolor_force_zero_does_not_force() {
+      assert!(!detect_colors_with(env_from(&[("CLICOLOR_FORCE", "0")]), || false));
+   }
+
+   #[test]
+   fn force_color_empty_does_not_force() {
+      assert!(!detect_colors_with(env_from(&[("FORCE_COLOR", "")]), || false));
+   }
+
+   #[test]
+   fn clicolor_zero_disables_on_tty() {
+      assert!(!detect_colors_with(env_from(&[("CLICOLOR", "0")]), || true));
+   }
+
+   #[test]
+   fn clicolor_one_falls_through_to_tty() {
+      assert!(detect_colors_with(env_from(&[("CLICOLOR", "1")]), || true));
+      assert!(!detect_colors_with(env_from(&[("CLICOLOR", "1")]), || false));
+   }
+
+   #[test]
+   fn no_env_falls_through_to_tty() {
+      assert!(detect_colors_with(env_from(&[]), || true));
+      assert!(!detect_colors_with(env_from(&[]), || false));
+   }
+
+   #[test]
+   fn force_beats_clicolor_zero() {
+      assert!(detect_colors_with(env_from(&[("CLICOLOR", "0"), ("FORCE_COLOR", "1")]), || false));
    }
 }
