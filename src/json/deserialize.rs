@@ -189,3 +189,98 @@ pub fn optional_map_of<T: FromJsonValue>(
       Some(other) => Err(type_err(context, key, "object", other.type_name()))
    }
 }
+
+/// Extract an optional `Vec<T>` where `T` implements `FromJsonValue`.
+///
+/// Inner errors are wrapped with `"{context}.{key}[{i}]: "` so the path to
+/// the failing element is visible in the error message.
+pub fn optional_vec_of<T: FromJsonValue>(
+   map: &BTreeMap<String, JsonValue>,
+   key: &str,
+   context: &str
+) -> Result<Option<Vec<T>>, JsonError> {
+   match map.get(key) {
+      Some(JsonValue::Array(arr)) => {
+         let mut out = Vec::with_capacity(arr.len());
+         for (i, v) in arr.iter().enumerate() {
+            let parsed = T::from_json_value(v).map_err(|e| JsonError::value(format!("{context}.{key}[{i}]: {e}")))?;
+            out.push(parsed);
+         }
+         Ok(Some(out))
+      }
+      Some(JsonValue::Null) | None => Ok(None),
+      Some(other) => Err(type_err(context, key, "array", other.type_name()))
+   }
+}
+
+#[cfg(test)]
+mod tests {
+   use super::*;
+   use crate::json::parse_json;
+
+   #[derive(Debug)]
+   struct Item {
+      name: String
+   }
+
+   impl FromJsonValue for Item {
+      fn from_json_value(value: &JsonValue) -> Result<Self, JsonError> {
+         let map = expect_object(value, "Item")?;
+         deny_unknown_fields(map, &["name"], "Item")?;
+         Ok(Item { name: require_string(map, "name", "Item")? })
+      }
+   }
+
+   fn parse_object(s: &str) -> BTreeMap<String, JsonValue> {
+      match parse_json(s).unwrap() {
+         JsonValue::Object(m) => m,
+         _ => panic!("expected object")
+      }
+   }
+
+   #[test]
+   fn optional_vec_of_parses_array() {
+      let map = parse_object(r#"{"items":[{"name":"a"},{"name":"b"}]}"#);
+      let v: Option<Vec<Item>> = optional_vec_of(&map, "items", "Outer").unwrap();
+      let v = v.unwrap();
+      assert_eq!(v.len(), 2);
+      assert_eq!(v[0].name, "a");
+      assert_eq!(v[1].name, "b");
+   }
+
+   #[test]
+   fn optional_vec_of_missing_is_none() {
+      let map = parse_object("{}");
+      let v: Option<Vec<Item>> = optional_vec_of(&map, "items", "Outer").unwrap();
+      assert!(v.is_none());
+   }
+
+   #[test]
+   fn optional_vec_of_null_is_none() {
+      let map = parse_object(r#"{"items":null}"#);
+      let v: Option<Vec<Item>> = optional_vec_of(&map, "items", "Outer").unwrap();
+      assert!(v.is_none());
+   }
+
+   #[test]
+   fn optional_vec_of_empty_array_is_some_empty() {
+      let map = parse_object(r#"{"items":[]}"#);
+      let v: Option<Vec<Item>> = optional_vec_of(&map, "items", "Outer").unwrap();
+      assert_eq!(v.unwrap().len(), 0);
+   }
+
+   #[test]
+   fn optional_vec_of_wrong_type_errors() {
+      let map = parse_object(r#"{"items":"oops"}"#);
+      let err = optional_vec_of::<Item>(&map, "items", "Outer").unwrap_err();
+      assert!(err.to_string().contains("Outer.items"), "got: {err}");
+      assert!(err.to_string().contains("expected array"), "got: {err}");
+   }
+
+   #[test]
+   fn optional_vec_of_inner_error_includes_index() {
+      let map = parse_object(r#"{"items":[{"name":"a"},{"name":42}]}"#);
+      let err = optional_vec_of::<Item>(&map, "items", "Outer").unwrap_err();
+      assert!(err.to_string().contains("Outer.items[1]"), "got: {err}");
+   }
+}

@@ -23,7 +23,8 @@ pub mod value;
 
 pub use deserialize::{
    FromJsonValue, deny_unknown_fields, expect_object, optional_bool, optional_f64, optional_i64, optional_map_of,
-   optional_nested, optional_string, optional_string_map, optional_string_vec, require_f64, require_string
+   optional_nested, optional_string, optional_string_map, optional_string_vec, optional_vec_of, require_f64,
+   require_string
 };
 pub use error::JsonError;
 pub use ops::{json_deep_merge, json_remove_paths};
