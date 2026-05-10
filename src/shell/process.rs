@@ -1,7 +1,5 @@
 //! Production [`Shell`](super::Shell) implementation backed by real OS processes.
 
-use std::process::{Command, Stdio};
-
 use super::{
    CommandResult, Shell, ShellConfig, ShellError, exec,
    helpers::{command_exists, command_output, shell_exec}
@@ -13,6 +11,27 @@ use crate::output::{Output, OutputMode};
 pub struct ProcessShell {
    /// Shell execution configuration (e.g. overlay viewport height).
    pub config: ShellConfig
+}
+
+/// Stdio handling for `ProcessShell::exec_via_shell`.
+enum StdioKind {
+   /// Pipe stdout/stderr and collect them silently.
+   Capture,
+   /// Inherit all three streams so the child can prompt the user.
+   Interactive
+}
+
+impl ProcessShell {
+   /// Spawn `cmd` under the configured shell program, with the requested
+   /// stdio handling. Shared backing for `exec_capture` and `exec_interactive`.
+   fn exec_via_shell(&self, cmd: &str, kind: StdioKind) -> Result<CommandResult, ShellError> {
+      let (program, flag) = self.config.effective_shell_program();
+      let args = [flag.as_str(), cmd];
+      match kind {
+         StdioKind::Capture => exec::run_quiet(&program, &args),
+         StdioKind::Interactive => exec::run_interactive(&program, &args)
+      }
+   }
 }
 
 impl Shell for ProcessShell {
@@ -41,27 +60,15 @@ impl Shell for ProcessShell {
    }
 
    fn exec_capture(&self, cmd: &str, _output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
-      let (program, flag) = self.config.effective_shell_program();
-      exec::run_quiet(&program, &[flag.as_str(), cmd])
+      self.exec_via_shell(cmd, StdioKind::Capture)
    }
 
    fn exec_interactive(&self, cmd: &str, _output: &mut dyn Output, _mode: OutputMode) -> Result<(), ShellError> {
-      let (program, flag) = self.config.effective_shell_program();
-
-      let status = Command::new(&program)
-         .args([flag.as_str(), cmd])
-         .stdin(Stdio::inherit())
-         .stdout(Stdio::inherit())
-         .stderr(Stdio::inherit())
-         .spawn()
-         .map_err(|e| ShellError::Spawn(program.clone(), e))?
-         .wait()
-         .map_err(|e| ShellError::Wait(program.clone(), e))?;
-
-      if status.success() {
+      let result = self.exec_via_shell(cmd, StdioKind::Interactive)?;
+      if result.success {
          Ok(())
       } else {
-         Err(ShellError::Failed(format!("'{cmd}' exited with {}", status.code().unwrap_or(-1))))
+         Err(ShellError::Failed(format!("'{cmd}' exited with {}", result.code.unwrap_or(-1))))
       }
    }
 }

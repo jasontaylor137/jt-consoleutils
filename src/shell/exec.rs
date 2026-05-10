@@ -118,6 +118,22 @@ pub(super) fn run_quiet(program: &str, args: &[&str]) -> Result<CommandResult, S
    Ok(CommandResult { success: status.success(), code: status.code(), stderr: stderr_lines.join("\n") })
 }
 
+/// Interactive mode: inherit all three stdio streams so the child can prompt
+/// the user (e.g. `aws sso login`).
+pub(super) fn run_interactive(program: &str, args: &[&str]) -> Result<CommandResult, ShellError> {
+   let status = Command::new(program)
+      .args(args)
+      .stdin(Stdio::inherit())
+      .stdout(Stdio::inherit())
+      .stderr(Stdio::inherit())
+      .spawn()
+      .map_err(|e| ShellError::Spawn(program.to_string(), e))?
+      .wait()
+      .map_err(|e| ShellError::Wait(program.to_string(), e))?;
+
+   Ok(CommandResult { success: status.success(), code: status.code(), stderr: String::new() })
+}
+
 /// Verbose mode: stream output with `| label...` header and `> ` prefixed lines.
 #[cfg(feature = "verbose")]
 fn run_verbose(
