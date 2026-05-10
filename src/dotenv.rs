@@ -63,20 +63,17 @@ pub fn load_dotenv(path: &Path) -> Result<HashMap<String, String>, DotenvError> 
 }
 
 fn map_dotenvy_error(e: DotenvyError, path: &Path) -> DotenvError {
+   let path = path.display().to_string();
    match e {
-      DotenvyError::Io(io_err) => DotenvError::Io { path: path.display().to_string(), source: io_err },
-      DotenvyError::LineParse(line, idx) => DotenvError::Parse {
-         path: path.display().to_string(),
-         line: idx + 1,
-         message: format!("parse error near: {line}")
-      },
-      DotenvyError::EnvVar(var_err) => DotenvError::Parse {
-         path: path.display().to_string(),
-         line: 0,
-         message: format!("variable expansion failed: {var_err}")
-      },
+      DotenvyError::Io(io_err) => DotenvError::Io { path, source: io_err },
+      DotenvyError::LineParse(line, idx) => {
+         DotenvError::Parse { path, line: idx + 1, message: format!("parse error near: {line}") }
+      }
+      DotenvyError::EnvVar(var_err) => {
+         DotenvError::Parse { path, line: 0, message: format!("variable expansion failed: {var_err}") }
+      }
       // `dotenvy::Error` is `#[non_exhaustive]`; required for forward-compat.
-      other => DotenvError::Parse { path: path.display().to_string(), line: 0, message: other.to_string() }
+      other => DotenvError::Parse { path, line: 0, message: other.to_string() }
    }
 }
 
