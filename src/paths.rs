@@ -162,7 +162,7 @@ fn strip_unc_prefix(path: PathBuf) -> PathBuf {
 /// the empty-string parent that `Path::new("bare_file.ts").parent()`
 /// returns.
 #[must_use]
-pub fn script_dir(path: &Path) -> &Path {
+pub fn parent_dir_or_dot(path: &Path) -> &Path {
    match path.parent() {
       Some(p) if !p.as_os_str().is_empty() => p,
       _ => Path::new(".")
@@ -175,7 +175,7 @@ pub fn script_dir(path: &Path) -> &Path {
 /// Callers decide their own fallback — this helper stays neutral about
 /// what a "default filename" should look like.
 #[must_use]
-pub fn script_filename(path: &Path) -> Option<&str> {
+pub fn file_name_str(path: &Path) -> Option<&str> {
    path.file_name().and_then(|f| f.to_str())
 }
 
@@ -251,27 +251,27 @@ mod tests {
 
    use super::*;
 
-   // -- script_dir --
+   // -- parent_dir_or_dot --
 
    #[test]
-   fn script_dir_returns_parent() {
+   fn parent_dir_or_dot_returns_parent() {
       // Given
       let path = Path::new("/some/dir/script.ts");
 
       // When
-      let dir = script_dir(path);
+      let dir = parent_dir_or_dot(path);
 
       // Then
       assert_eq!(dir, Path::new("/some/dir"));
    }
 
    #[test]
-   fn script_dir_falls_back_to_dot_for_bare_filename() {
+   fn parent_dir_or_dot_falls_back_to_dot_for_bare_filename() {
       // Given
       let path = Path::new("script.ts");
 
       // When
-      let dir = script_dir(path);
+      let dir = parent_dir_or_dot(path);
 
       // Then
       assert_eq!(dir, Path::new("."));
@@ -366,16 +366,16 @@ mod tests {
       assert_eq!(result, PathBuf::from("/nonexistent/path/never/existed"));
    }
 
-   // -- script_filename --
+   // -- file_name_str --
 
    #[test]
-   fn script_filename_returns_basename() {
-      assert_eq!(script_filename(Path::new("/a/b/deploy.sh")), Some("deploy.sh"));
+   fn file_name_str_returns_basename() {
+      assert_eq!(file_name_str(Path::new("/a/b/deploy.sh")), Some("deploy.sh"));
    }
 
    #[test]
-   fn script_filename_returns_none_for_root() {
-      assert_eq!(script_filename(Path::new("/")), None);
+   fn file_name_str_returns_none_for_root() {
+      assert_eq!(file_name_str(Path::new("/")), None);
    }
 
    // -- home_dir --
