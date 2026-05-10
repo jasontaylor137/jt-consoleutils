@@ -42,6 +42,9 @@ pub trait ToJson {
 pub struct StructSerializer {
    out: String,
    field_count: usize,
+   /// Indent level of this object's closing brace. Fields are written at
+   /// `indent + 1`. Top-level objects start at 0, matching
+   /// [`crate::json::to_json_pretty`].
    indent: usize
 }
 
@@ -54,12 +57,12 @@ impl Default for StructSerializer {
 impl StructSerializer {
    /// Create a new top-level serializer.
    pub fn new() -> Self {
-      Self::nested(1)
+      Self::nested(0)
    }
 
-   /// Internal: create a serializer at a given indent level. Used by
-   /// `field_object` to construct a child serializer that shares output state
-   /// with the parent.
+   /// Internal: create a serializer whose closing brace lives at `indent`.
+   /// Used by `field_object` to construct a child serializer that shares the
+   /// parent's indent semantics.
    fn nested(indent: usize) -> Self {
       StructSerializer { out: String::from("{\n"), field_count: 0, indent }
    }
@@ -170,20 +173,21 @@ impl StructSerializer {
          return;
       }
       self.out.push_str("[\n");
-      let inner = self.indent + 1;
+      let item_indent = self.indent + 2;
+      let close_indent = self.indent + 1;
       let mut first = true;
       for v in values {
          if !first {
             self.out.push_str(",\n");
          }
          first = false;
-         for _ in 0..inner {
+         for _ in 0..item_indent {
             self.out.push_str("  ");
          }
          push_json_string(&mut self.out, v);
       }
       self.out.push('\n');
-      for _ in 0..self.indent {
+      for _ in 0..close_indent {
          self.out.push_str("  ");
       }
       self.out.push(']');
@@ -198,8 +202,7 @@ impl StructSerializer {
          return "{}".to_string();
       }
       self.out.push('\n');
-      // Closing brace is indented one level shallower than fields inside.
-      for _ in 0..(self.indent - 1) {
+      for _ in 0..self.indent {
          self.out.push_str("  ");
       }
       self.out.push('}');
@@ -213,7 +216,7 @@ impl StructSerializer {
          self.out.push_str(",\n");
       }
       self.field_count += 1;
-      for _ in 0..self.indent {
+      for _ in 0..(self.indent + 1) {
          self.out.push_str("  ");
       }
       push_json_string(&mut self.out, key);
@@ -345,6 +348,44 @@ mod tests {
          child.field_array_str("tags", &["x".to_string()]);
       });
       assert_eq!(s.finish(), "{\n  \"inner\": {\n    \"tags\": [\n      \"x\"\n    ]\n  }\n}");
+   }
+
+   #[test]
+   fn matches_to_json_pretty_for_equivalent_data() {
+      use crate::json::{JsonValue, to_json_pretty};
+      use std::collections::BTreeMap;
+
+      // Build the same shape via both paths. Use keys in alphabetical order
+      // so that BTreeMap (sorted) and StructSerializer (insertion order) emit
+      // the same key sequence; this test isolates indentation, not ordering.
+      let mut s = StructSerializer::new();
+      s.field_str("a", "x");
+      s.field_array_str("b", &["one".to_string(), "two".to_string()]);
+      s.field_object("c", |c| {
+         c.field_str("d", "v");
+         c.field_array_str("e", &["x".to_string()]);
+         c.field_object("f", |f| {
+            f.field_i64("g", 1);
+         });
+      });
+      let from_struct = s.finish();
+
+      let mut deepest = BTreeMap::new();
+      deepest.insert("g".to_string(), JsonValue::Number("1".to_string()));
+      let mut middle = BTreeMap::new();
+      middle.insert("d".to_string(), JsonValue::String("v".to_string()));
+      middle.insert("e".to_string(), JsonValue::Array(vec![JsonValue::String("x".to_string())]));
+      middle.insert("f".to_string(), JsonValue::Object(deepest));
+      let mut top = BTreeMap::new();
+      top.insert("a".to_string(), JsonValue::String("x".to_string()));
+      top.insert(
+         "b".to_string(),
+         JsonValue::Array(vec![JsonValue::String("one".to_string()), JsonValue::String("two".to_string())])
+      );
+      top.insert("c".to_string(), JsonValue::Object(middle));
+      let from_value = to_json_pretty(&JsonValue::Object(top));
+
+      assert_eq!(from_struct, from_value);
    }
 
    #[test]
