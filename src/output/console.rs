@@ -1,10 +1,8 @@
 //! [`ConsoleOutput`] — production [`Output`] writing to stdout/stderr.
 
-#[cfg(feature = "verbose")]
-use super::with_prefix;
-#[cfg(feature = "trace")]
-use super::with_trace_prefix;
 use super::{DEFAULT_THEME, Output, OutputMode, RenderTheme, format_elapsed};
+#[cfg(any(feature = "verbose", feature = "trace"))]
+use super::{Dim, with_prefix};
 
 /// Production [`Output`] implementation that writes to stdout.
 ///
@@ -127,7 +125,7 @@ impl Output for ConsoleOutput {
 
    #[cfg(feature = "verbose")]
    fn emit_verbose(&mut self, msg: String) {
-      print!("{}", with_prefix("| ", &msg));
+      print!("{}", with_prefix("| ", &msg, Dim::No));
    }
 
    #[cfg(feature = "trace")]
@@ -137,7 +135,7 @@ impl Output for ConsoleOutput {
 
    #[cfg(feature = "trace")]
    fn emit_trace(&mut self, msg: String) {
-      print!("{}", with_trace_prefix(&msg));
+      print!("{}", with_prefix("· ", &msg, Dim::Yes));
    }
 
    #[cfg(feature = "verbose")]

@@ -175,21 +175,25 @@ fn format_elapsed(ms: u128) -> String {
 }
 
 #[cfg(any(feature = "verbose", feature = "trace"))]
-fn with_prefix(prefix: &str, msg: &str) -> String {
-   use std::fmt::Write as _;
-   let mut out = String::new();
-   for l in msg.lines() {
-      let _ = writeln!(out, "{prefix}{l}");
-   }
-   out
+#[derive(Copy, Clone)]
+enum Dim {
+   Yes,
+   No
 }
 
-#[cfg(feature = "trace")]
-fn with_trace_prefix(msg: &str) -> String {
+#[cfg(any(feature = "verbose", feature = "trace"))]
+fn with_prefix(prefix: &str, msg: &str, dim: Dim) -> String {
    use std::fmt::Write as _;
    let mut out = String::new();
    for l in msg.lines() {
-      let _ = writeln!(out, "[2m· {l}[0m");
+      match dim {
+         Dim::Yes => {
+            let _ = writeln!(out, "\x1b[2m{prefix}{l}\x1b[0m");
+         }
+         Dim::No => {
+            let _ = writeln!(out, "{prefix}{l}");
+         }
+      }
    }
    out
 }

@@ -2,9 +2,9 @@
 
 use std::fmt::Write as _;
 
-#[cfg(any(feature = "verbose", feature = "trace"))]
-use super::with_prefix;
 use super::{DEFAULT_THEME, Output, RenderTheme, format_elapsed};
+#[cfg(any(feature = "verbose", feature = "trace"))]
+use super::{Dim, with_prefix};
 
 /// In-memory [`Output`] implementation for use in tests.
 ///
@@ -110,7 +110,7 @@ impl Output for StringOutput {
 
    #[cfg(feature = "verbose")]
    fn emit_verbose(&mut self, msg: String) {
-      self.buf.push_str(&with_prefix("| ", &msg));
+      self.buf.push_str(&with_prefix("| ", &msg, Dim::No));
    }
 
    #[cfg(feature = "trace")]
@@ -120,17 +120,17 @@ impl Output for StringOutput {
 
    #[cfg(feature = "trace")]
    fn emit_trace(&mut self, msg: String) {
-      self.buf.push_str(&with_prefix("· ", &msg));
+      self.buf.push_str(&with_prefix("· ", &msg, Dim::No));
    }
 
    #[cfg(feature = "verbose")]
    fn shell_command(&mut self, cmd: &str) {
-      self.buf.push_str(&with_prefix("> ", cmd));
+      self.buf.push_str(&with_prefix("> ", cmd, Dim::No));
    }
 
    #[cfg(feature = "verbose")]
    fn shell_line(&mut self, line: &str) {
-      self.buf.push_str(&with_prefix("> ", line));
+      self.buf.push_str(&with_prefix("> ", line, Dim::No));
    }
 
    fn step_result(&mut self, label: &str, success: bool, elapsed_ms: u128, _viewport: &[String]) {
