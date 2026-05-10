@@ -12,6 +12,7 @@
 //!   captures all output in a `String` that can be inspected with
 //!   [`StringOutput::log`](crate::output::StringOutput::log).
 
+pub mod action;
 mod console;
 #[cfg(feature = "file-stats")]
 pub mod file_stats;

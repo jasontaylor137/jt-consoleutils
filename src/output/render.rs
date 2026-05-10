@@ -1,19 +1,26 @@
-//! Internal rendering primitives for the typed output kinds.
+//! Pure rendering primitives for the typed output kinds.
 //!
 //! - [`RenderTheme`] — pluggable glyph + connector-word table. Use [`DEFAULT_THEME`] for the
 //!   canonical Unicode look or [`ASCII_THEME`] for terminals without emoji/Unicode support.
 //!   Translate by building a custom theme.
-//! - [`Trailing`] — the trailing-context variants an action can carry.
 //! - Render functions return `String`; the caller decides whether to emit ANSI based on its own
 //!   `colors_enabled` flag and which theme to apply.
+//!
+//! The action-line builder DSL ([`Trailing`], `ActionBuilder`, `OutputAction`)
+//! lives in [`super::action`]; this module only holds the leaf renderers it
+//! eventually calls. [`OutputAction`] is also re-exported here for backwards
+//! compatibility — new code should import it from [`super::action`].
+//!
+//! [`Trailing`]: super::action::Trailing
+//! [`OutputAction`]: super::action::OutputAction
 
 use std::fmt::Write as _;
 
-use crate::{
-   output::Output,
-   terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW},
-   vocab::AsNoun
-};
+use super::action::Trailing;
+use crate::terminal::colors::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW};
+
+#[doc(hidden)]
+pub use super::action::OutputAction;
 
 /// Pluggable glyphs and connector words used by every render function.
 ///
@@ -41,9 +48,9 @@ pub struct RenderTheme {
    pub warn_label: &'static str,
    /// Label printed after [`error_glyph`](Self::error_glyph). Default: `error:`.
    pub error_label: &'static str,
-   /// Connector word for [`Trailing::PrepTo`]. Default: `to`.
+   /// Connector word for [`Trailing::PrepTo`](super::action::Trailing::PrepTo). Default: `to`.
    pub prep_to: &'static str,
-   /// Connector word for [`Trailing::PrepFrom`]. Default: `from`.
+   /// Connector word for [`Trailing::PrepFrom`](super::action::Trailing::PrepFrom). Default: `from`.
    pub prep_from: &'static str
 }
 
@@ -80,30 +87,6 @@ pub const ASCII_THEME: RenderTheme = RenderTheme {
    prep_to: "to",
    prep_from: "from"
 };
-
-/// Trailing context attached to an [`OutputAction::action`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Trailing {
-   /// Arrow-prefixed path: ` → /some/path`.
-   ArrowPath(String),
-   /// Themed prepositional phrase using [`RenderTheme::prep_to`].
-   PrepTo(String),
-   /// Themed prepositional phrase using [`RenderTheme::prep_from`].
-   PrepFrom(String),
-   /// Caller-supplied connector word + target. Bypasses the theme — use
-   /// only when the connector cannot be expressed via [`PrepTo`](Self::PrepTo)
-   /// / [`PrepFrom`](Self::PrepFrom).
-   PrepCustom {
-      /// Connector word, e.g. `"into"` or `"as"`.
-      word: &'static str,
-      /// Target text rendered in dim.
-      target: String
-   },
-   /// Pre-rendered count phrase: `"2 deps"` or `"1 environment"`.
-   Count(String),
-   /// Bare object — already in `subject`; render nothing.
-   None
-}
 
 /// Optional parenthetical note: `(switched from auth.ts)`.
 pub type Note = Option<String>;
@@ -238,145 +221,6 @@ pub fn render_item(name: &str, trailing: &str, colors: bool) -> String {
 #[must_use]
 pub fn count_phrase(n: usize, singular: &str, plural: &str) -> String {
    if n == 1 { format!("{n} {singular}") } else { format!("{n} {plural}") }
-}
-
-/// Drop-guard builder for [`OutputAction::action`].
-///
-/// Emits the rendered line on Drop. Chainable methods set trailing context;
-/// passing none emits the bare `<success_glyph> <Verb> <subject>` form.
-///
-/// ```ignore
-/// out.action("Edited", "deploy.ts").hint("run 'sr unedit' when done");
-/// ```
-pub struct ActionBuilder<'a> {
-   out: &'a mut (dyn Output + 'a),
-   verb: String,
-   subject: Option<String>,
-   trailing: Trailing,
-   note: Note,
-   hint: Hint,
-   /// Whether the destination should render colors (resolved at builder creation).
-   colors: bool,
-   /// Theme captured at builder creation so Drop has no borrow conflict with `out`.
-   theme: RenderTheme
-}
-
-impl<'a> ActionBuilder<'a> {
-   /// Internal constructor — use [`Output::action`].
-   pub(crate) fn new(
-      out: &'a mut (dyn Output + 'a),
-      verb: String,
-      subject: Option<String>,
-      colors: bool,
-      theme: RenderTheme
-   ) -> Self {
-      Self { out, verb, subject, trailing: Trailing::None, note: None, hint: None, colors, theme }
-   }
-
-   /// Trailing path with arrow separator: ` → /some/path`.
-   pub fn to_path(mut self, path: impl Into<String>) -> Self {
-      self.trailing = Trailing::ArrowPath(path.into());
-      self
-   }
-
-   /// Trailing prepositional phrase: ` to <what>`.
-   pub fn to(mut self, what: impl Into<String>) -> Self {
-      self.trailing = Trailing::PrepTo(what.into());
-      self
-   }
-
-   /// Trailing prepositional phrase: ` from <what>`.
-   pub fn from(mut self, what: impl Into<String>) -> Self {
-      self.trailing = Trailing::PrepFrom(what.into());
-      self
-   }
-
-   /// Trailing count phrase: ` <n> <noun.singular|plural>`.
-   pub fn count<N: AsNoun>(mut self, n: usize, noun: N) -> Self {
-      self.trailing = Trailing::Count(count_phrase(n, noun.singular(), noun.plural()));
-      self
-   }
-
-   /// Inline parenthetical note: ` (<note>)`.
-   pub fn note(mut self, note: impl Into<String>) -> Self {
-      self.note = Some(note.into());
-      self
-   }
-
-   /// Inline em-dash hint: ` — <hint>`.
-   pub fn hint(mut self, hint: impl Into<String>) -> Self {
-      self.hint = Some(hint.into());
-      self
-   }
-}
-
-/// Extension trait that adds the typed [`OutputAction::action`] method to any
-/// type implementing [`Output`]. Because the method is generic over `AsVerb`,
-/// it cannot live on the dyn-compatible [`Output`] trait directly — this
-/// extension trait is auto-implemented for every concrete `Output` and
-/// separately for `dyn Output`, pulling the typed method into method-call
-/// position.
-pub trait OutputAction {
-   /// Begin emitting an action line. Accepts any `impl AsVerb` (typically a
-   /// project-specific `Verb` enum).
-   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_>;
-
-   /// Begin emitting a subject-less summary line — typically followed by
-   /// `.count(n, noun)` to render `<success_glyph> <Verb> <n> <nouns>`. Use
-   /// when the line describes an aggregate rather than a specific named
-   /// subject.
-   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_>;
-}
-
-// Two near-identical impls: one for `dyn Output` (which doesn't satisfy
-// `Sized`, so the generic blanket can't cover it) and one for concrete
-// `T: Output`. Bodies delegate to the same helper.
-fn build_action<'a>(out: &'a mut (dyn Output + 'a), verb: &str, subject: &str) -> ActionBuilder<'a> {
-   let colors = out.colors_enabled();
-   let theme = out.theme();
-   let subj = if subject.is_empty() { None } else { Some(subject.to_string()) };
-   ActionBuilder::new(out, verb.to_string(), subj, colors, theme)
-}
-
-fn build_summary<'a>(out: &'a mut (dyn Output + 'a), verb: &str) -> ActionBuilder<'a> {
-   let colors = out.colors_enabled();
-   let theme = out.theme();
-   ActionBuilder::new(out, verb.to_string(), None, colors, theme)
-}
-
-impl OutputAction for dyn Output + '_ {
-   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
-      build_action(self, verb.as_verb(), subject)
-   }
-
-   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
-      build_summary(self, verb.as_verb())
-   }
-}
-
-impl<T: Output> OutputAction for T {
-   fn action<V: crate::vocab::AsVerb>(&mut self, verb: V, subject: &str) -> ActionBuilder<'_> {
-      build_action(self, verb.as_verb(), subject)
-   }
-
-   fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_> {
-      build_summary(self, verb.as_verb())
-   }
-}
-
-impl Drop for ActionBuilder<'_> {
-   fn drop(&mut self) {
-      let line = render_action(
-         &self.verb,
-         self.subject.as_deref(),
-         &self.trailing,
-         &self.note,
-         &self.hint,
-         self.colors,
-         &self.theme
-      );
-      self.out.writeln(&line);
-   }
 }
 
 #[cfg(test)]
