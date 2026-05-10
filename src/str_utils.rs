@@ -62,7 +62,18 @@ pub fn format_bytes_si(bytes: u64) -> String {
    }
 }
 
-/// Convert a `Path` to a `String` via `display()`.
+/// Convert a `Path` to a `String` via [`Path::display`].
+///
+/// One-line wrapper kept deliberately. It marks every site that performs a
+/// **lossy, display-only** conversion (error messages, dry-run logs, JSON
+/// metadata fields) — distinct from `path.to_str().ok_or(…)` for sites that
+/// must preserve byte-for-byte fidelity. Greppable: searching for
+/// `path_to_string` finds all the "this is OK to mangle non-UTF-8" sites in
+/// one pass; an open-coded `.display().to_string()` blends in with all other
+/// `to_string` calls.
+///
+/// Use this at every user-facing display site; use `to_string_lossy` or
+/// `to_str()` directly only when the result is fed back to the filesystem.
 #[must_use]
 pub fn path_to_string(path: &Path) -> String {
    path.display().to_string()

@@ -180,7 +180,16 @@ pub fn file_name_str(path: &Path) -> Option<&str> {
 }
 
 /// Strip the file extension for display (e.g. `"deploy.sh"` → `"deploy"`).
-/// Uses `Path::file_stem`, which strips only the last extension.
+///
+/// Thin wrapper over [`Path::file_stem`] that exists because the raw API
+/// returns `Option<&OsStr>`, which most user-facing display sites would have
+/// to convert anyway. This helper:
+///
+/// - Returns `String` (display-ready) rather than `Option<&OsStr>`.
+/// - Falls back to the input `filename` when `file_stem` returns `None`
+///   (e.g. paths ending in `..`) **or** when the stem isn't valid UTF-8 —
+///   so callers can always render *something* without an extra match arm.
+/// - Strips only the last extension (so `"archive.tar.gz"` → `"archive.tar"`).
 #[must_use]
 pub fn strip_extension(filename: &str) -> String {
    Path::new(filename).file_stem().and_then(|s| s.to_str()).unwrap_or(filename).to_string()
