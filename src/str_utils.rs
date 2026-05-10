@@ -6,16 +6,47 @@
 
 use std::path::Path;
 
-/// Format a byte count as a human-readable string with one decimal place.
-/// Examples: `"0 B"`, `"512 B"`, `"1.0 KB"`, `"3.5 MB"`, `"1.2 GB"`.
+/// Format a byte count as a human-readable string with one decimal place,
+/// using **IEC binary units** (powers of 1024) and matching suffixes:
+/// `"0 B"`, `"512 B"`, `"1.0 KiB"`, `"3.5 MiB"`, `"1.2 GiB"`.
+///
+/// Matches the convention used by `du -h`, BSD tools, and most modern
+/// Linux/Unix utilities. For decimal/SI units (powers of 1000, "KB"/"MB"/"GB"),
+/// see [`format_bytes_si`].
 ///
 /// Uses integer arithmetic to avoid pulling in the ~5 KB f64 Display
 /// formatting machinery from `core::fmt::float`.
 #[must_use]
 pub fn format_bytes(bytes: u64) -> String {
-   const KB: u64 = 1024;
-   const MB: u64 = 1024 * KB;
-   const GB: u64 = 1024 * MB;
+   const KIB: u64 = 1024;
+   const MIB: u64 = 1024 * KIB;
+   const GIB: u64 = 1024 * MIB;
+
+   if bytes >= GIB {
+      let tenths = (bytes * 10 + GIB / 2) / GIB;
+      format!("{}.{} GiB", tenths / 10, tenths % 10)
+   } else if bytes >= MIB {
+      let tenths = (bytes * 10 + MIB / 2) / MIB;
+      format!("{}.{} MiB", tenths / 10, tenths % 10)
+   } else if bytes >= KIB {
+      let tenths = (bytes * 10 + KIB / 2) / KIB;
+      format!("{}.{} KiB", tenths / 10, tenths % 10)
+   } else {
+      format!("{bytes} B")
+   }
+}
+
+/// Format a byte count as a human-readable string with one decimal place,
+/// using **decimal/SI units** (powers of 1000) and matching suffixes:
+/// `"0 B"`, `"512 B"`, `"1.0 KB"`, `"3.5 MB"`, `"1.2 GB"`.
+///
+/// Matches the convention used by disk-drive marketing, network speeds,
+/// and `ls -h --si`. For binary/IEC units, see [`format_bytes`].
+#[must_use]
+pub fn format_bytes_si(bytes: u64) -> String {
+   const KB: u64 = 1000;
+   const MB: u64 = 1000 * KB;
+   const GB: u64 = 1000 * MB;
 
    if bytes >= GB {
       let tenths = (bytes * 10 + GB / 2) / GB;
@@ -71,21 +102,50 @@ mod tests {
    }
 
    #[test]
-   fn format_bytes_kilobytes() {
-      assert_eq!(format_bytes(1024), "1.0 KB");
-      assert_eq!(format_bytes(1536), "1.5 KB");
+   fn format_bytes_kibibytes() {
+      assert_eq!(format_bytes(1024), "1.0 KiB");
+      assert_eq!(format_bytes(1536), "1.5 KiB");
    }
 
    #[test]
-   fn format_bytes_megabytes() {
-      assert_eq!(format_bytes(1_048_576), "1.0 MB");
-      assert_eq!(format_bytes(1_572_864), "1.5 MB");
+   fn format_bytes_mebibytes() {
+      assert_eq!(format_bytes(1_048_576), "1.0 MiB");
+      assert_eq!(format_bytes(1_572_864), "1.5 MiB");
    }
 
    #[test]
-   fn format_bytes_gigabytes() {
-      assert_eq!(format_bytes(1_073_741_824), "1.0 GB");
-      assert_eq!(format_bytes(1_610_612_736), "1.5 GB");
+   fn format_bytes_gibibytes() {
+      assert_eq!(format_bytes(1_073_741_824), "1.0 GiB");
+      assert_eq!(format_bytes(1_610_612_736), "1.5 GiB");
+   }
+
+   // -------------------------------------------------------------------------
+   // format_bytes_si
+   // -------------------------------------------------------------------------
+
+   #[test]
+   fn format_bytes_si_bytes() {
+      assert_eq!(format_bytes_si(0), "0 B");
+      assert_eq!(format_bytes_si(512), "512 B");
+      assert_eq!(format_bytes_si(999), "999 B");
+   }
+
+   #[test]
+   fn format_bytes_si_kilobytes() {
+      assert_eq!(format_bytes_si(1000), "1.0 KB");
+      assert_eq!(format_bytes_si(1500), "1.5 KB");
+   }
+
+   #[test]
+   fn format_bytes_si_megabytes() {
+      assert_eq!(format_bytes_si(1_000_000), "1.0 MB");
+      assert_eq!(format_bytes_si(1_500_000), "1.5 MB");
+   }
+
+   #[test]
+   fn format_bytes_si_gigabytes() {
+      assert_eq!(format_bytes_si(1_000_000_000), "1.0 GB");
+      assert_eq!(format_bytes_si(1_500_000_000), "1.5 GB");
    }
 
    // -------------------------------------------------------------------------
