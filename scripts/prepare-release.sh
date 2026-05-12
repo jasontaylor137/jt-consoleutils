@@ -91,19 +91,33 @@ echo "--- Checking repo state ---"
 
 CURRENT_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
 LOWER=$(printf '%s\n%s\n' "$CURRENT_VERSION" "$VERSION" | sort -V | head -1)
+HAS_CHANGELOG_SECTION=false
+if grep -qE "^## \[${VERSION//./\\.}\]" CHANGELOG.md; then
+  HAS_CHANGELOG_SECTION=true
+fi
+
 if [[ "$CURRENT_VERSION" == "$VERSION" ]]; then
+  if $HAS_CHANGELOG_SECTION; then
+    echo "  Cargo.toml at ${VERSION} and CHANGELOG.md already has [${VERSION}] section."
+    echo "  Release is fully prepared — nothing to do."
+    echo ""
+    echo "==> Already prepared. Next steps:"
+    echo "    Inspect:      git show HEAD"
+    echo "    Publish:      scripts/publish-release.sh"
+    exit 0
+  fi
   STATE="already-bumped"
   echo "  Cargo.toml already at ${VERSION} (skip bump, verify consistency)"
 elif [[ "$LOWER" == "$CURRENT_VERSION" ]]; then
+  if $HAS_CHANGELOG_SECTION; then
+    echo "ERROR: CHANGELOG.md has [${VERSION}] section but Cargo.toml is still at ${CURRENT_VERSION}."
+    echo "       Half-prepped state — fix manually."
+    exit 1
+  fi
   STATE="needs-bump"
   echo "  Cargo.toml at ${CURRENT_VERSION}; will bump to ${VERSION}"
 else
   echo "ERROR: Cargo.toml is at ${CURRENT_VERSION}, ahead of target ${VERSION}."
-  exit 1
-fi
-
-if grep -qE "^## \[${VERSION//./\\.}\]" CHANGELOG.md; then
-  echo "ERROR: CHANGELOG.md already has a [${VERSION}] section."
   exit 1
 fi
 
