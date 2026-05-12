@@ -2,12 +2,19 @@
 set -euo pipefail
 
 # ── Usage ────────────────────────────────────────────────────────────────────
-#   scripts/publish-release.sh
+#   scripts/publish-release.sh [version]
 #
 # Run after scripts/prepare-release.sh. Tags HEAD, pushes commit + tag, and
 # publishes to crates.io. Re-validates the crates.io token before doing
 # anything irreversible.
+#
+# By default, the version is parsed from the HEAD commit message
+# ('release vX.Y.Z'). Pass an explicit version (e.g. '0.5.0') to skip that
+# check — useful when the release commit was made manually with a different
+# message. Cargo.toml must still match the chosen version.
 # ─────────────────────────────────────────────────────────────────────────────
+
+OVERRIDE_VERSION="${1:-}"
 
 echo "==> Publishing"
 echo ""
@@ -22,23 +29,34 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 echo "  Working tree is clean"
 
+CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
 HEAD_MSG=$(git log -1 --pretty=%s)
-if [[ ! "$HEAD_MSG" =~ ^release[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-  echo "ERROR: HEAD message is '${HEAD_MSG}'; expected 'release vX.Y.Z'."
-  echo "       Run scripts/prepare-release.sh first."
-  exit 1
+
+if [[ -n "$OVERRIDE_VERSION" ]]; then
+  if [[ "$OVERRIDE_VERSION" != "$CARGO_VERSION" ]]; then
+    echo "ERROR: requested version ${OVERRIDE_VERSION} but Cargo.toml is at ${CARGO_VERSION}."
+    exit 1
+  fi
+  VERSION="$OVERRIDE_VERSION"
+  echo "  Using version ${VERSION} (override; HEAD: '${HEAD_MSG}')"
+else
+  if [[ ! "$HEAD_MSG" =~ ^release[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    echo "ERROR: HEAD message is '${HEAD_MSG}'; expected 'release vX.Y.Z'."
+    echo "       Run scripts/prepare-release.sh first, or pass version explicitly:"
+    echo "         scripts/publish-release.sh ${CARGO_VERSION}"
+    exit 1
+  fi
+  COMMIT_VERSION=$(echo "$HEAD_MSG" | sed -E 's/^release[[:space:]]+v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')
+  if [[ "$CARGO_VERSION" != "$COMMIT_VERSION" ]]; then
+    echo "ERROR: Cargo.toml (${CARGO_VERSION}) and commit message (${COMMIT_VERSION}) disagree."
+    exit 1
+  fi
+  VERSION="$CARGO_VERSION"
 fi
 
-CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-COMMIT_VERSION=$(echo "$HEAD_MSG" | sed -E 's/^release[[:space:]]+v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')
-if [[ "$CARGO_VERSION" != "$COMMIT_VERSION" ]]; then
-  echo "ERROR: Cargo.toml (${CARGO_VERSION}) and commit message (${COMMIT_VERSION}) disagree."
-  exit 1
-fi
-VERSION="$CARGO_VERSION"
 TAG="v${VERSION}"
 HEAD_SHA=$(git rev-parse HEAD)
-echo "  HEAD is 'release ${TAG}' at ${HEAD_SHA:0:10}"
+echo "  Publishing ${TAG} from ${HEAD_SHA:0:10}"
 echo ""
 
 # ── 2. Re-validate crates.io token ──────────────────────────────────────────
@@ -60,12 +78,18 @@ HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "Authorization: $TOKEN" \
   -H "User-Agent: publish-release.sh (jt-consoleutils)" \
   https://crates.io/api/v1/me)
-if [[ "$HTTP" != "200" ]]; then
-  echo "ERROR: crates.io rejected token (HTTP $HTTP)."
-  echo "       Refresh at https://crates.io/me/ and run: cargo login"
-  exit 1
-fi
-echo "  Token valid (crates.io HTTP 200)"
+# 200 = unscoped token; 403 = scoped token (recognized but /me is outside its
+# scopes — token is still valid for publish). 401 = expired/invalid token,
+# which is what we actually want to fail fast on.
+case "$HTTP" in
+  200) echo "  Token valid (crates.io HTTP 200, unscoped)" ;;
+  403) echo "  Token valid (crates.io HTTP 403, scoped — /me out of scope)" ;;
+  *)
+    echo "ERROR: crates.io rejected token (HTTP $HTTP)."
+    echo "       Refresh at https://crates.io/me/ and run: cargo login"
+    exit 1
+    ;;
+esac
 echo ""
 
 # ── 3. Tag ──────────────────────────────────────────────────────────────────
