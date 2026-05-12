@@ -34,7 +34,7 @@
 //! | [`envvars`] | `${VAR}` expansion from the process environment |
 //! | [`signals`] | SIGINT / Ctrl+C handling for graceful shutdown |
 //! | [`vocab`] | `AsVerb` / `AsNoun` traits for action-line vocabulary |
-//! | [`dotenv`] *(feature `dotenv`)* | `.env` file loader |
+//! | `dotenv` *(feature `dotenv`)* | `.env` file loader |
 //! | `build_support` *(feature `build-support`)* | `build.rs` helper that emits `BUILD_DATE` / `GIT_HASH` |
 //! | `output::file_stats` *(feature `file-stats`)* | `FileStats` counters + `--- Summary ---` row for file-op CLIs |
 //!

@@ -1,17 +1,17 @@
-//! The [`Shell`] trait and its standard implementations.
+//! The [`Shell`](crate::shell::Shell) trait and its standard implementations.
 //!
 //! # Overview
 //!
-//! - [`Shell`] — the core trait; implement it to control how processes are spawned.
-//! - [`ProcessShell`] — the production implementation; spawns real OS processes.
-//! - [`DryRunShell`] — logs what would be executed and returns fake success; safe to use in dry-run
+//! - [`Shell`](crate::shell::Shell) — the core trait; implement it to control how processes are spawned.
+//! - [`ProcessShell`](crate::shell::ProcessShell) — the production implementation; spawns real OS processes.
+//! - [`DryRunShell`](crate::shell::DryRunShell) — logs what would be executed and returns fake success; safe to use in dry-run
 //!   workflows.
-//! - [`MockShell`] — records calls and returns configurable results; intended for unit tests.
-//! - [`scripted::OverlayScriptedShell`] — drives the real spinner overlay using pre-configured
+//! - [`MockShell`](crate::shell::MockShell) — records calls and returns configurable results; intended for unit tests.
+//! - [`scripted::OverlayScriptedShell`](crate::shell::scripted::OverlayScriptedShell) — drives the real spinner overlay using pre-configured
 //!   output scripts; intended for overlay integration tests. Only `run_command` is scripted — every
-//!   other [`Shell`] method panics.
+//!   other [`Shell`](crate::shell::Shell) method panics.
 //!
-//! Use [`create`] to get a boxed `Shell` at runtime based on a `dry_run` flag.
+//! Use [`create`](crate::shell::create) to get a boxed `Shell` at runtime based on a `dry_run` flag.
 
 use std::io;
 

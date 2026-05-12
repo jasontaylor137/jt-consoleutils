@@ -36,8 +36,8 @@ pub use string::StringOutput;
 /// - [`StringOutput`] — captures everything in a `String` for assertions.
 ///
 /// Use the [`verbose!`](crate::verbose) and [`trace!`](crate::trace) macros to
-/// emit level-gated messages — they check [`is_verbose`](Output::is_verbose) /
-/// [`is_trace`](Output::is_trace) before formatting the string, so no allocation
+/// emit level-gated messages — they check `is_verbose` /
+/// `is_trace` before formatting the string, so no allocation
 /// occurs when the level is inactive.
 ///
 /// Implement this trait to redirect output to a logger, a file, or anywhere else.

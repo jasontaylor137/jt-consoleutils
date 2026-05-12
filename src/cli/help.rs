@@ -1,6 +1,6 @@
 //! Help-and-version printers used at the [`CliOutcome`] handoff.
 //!
-//! The CLI framework in [`crate::cli::parse`] is split-phase: it never writes
+//! The CLI framework in [`crate::cli::parse_cli`] is split-phase: it never writes
 //! to stdout or calls [`std::process::exit`] itself. Instead it returns a
 //! [`CliOutcome`] carrying the help or version *text*, leaving the actual
 //! print, exit-code choice, and any post-print work to the application's
