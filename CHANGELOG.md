@@ -7,36 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
-
-### Changed
-
-- **BREAKING:** Help and version are no longer modeled as `CliError` variants. `cli::parse_cli` / `parse_cli_from` now return `Result<CliOutcome<C>, CliError>`, where the new `CliOutcome` enum carries the three success shapes (`Parsed(ParsedCli<C>)`, `Help(String)`, `Version(String)`). `CliError` shrinks to genuine errors only (`Usage`, `Conflict`); the `ShowHelp` and `ShowVersion` variants and their `show_help` / `show_version` constructors are gone. Sub-parsers that previously returned `Err(CliError::ShowHelp(...))` to surface help on unknown sub-subcommands should now return `Err(CliError::Usage(...))` pointing the user at `help <cmd>`, since `Result<C, CliError>` no longer has a non-error path.
-- **BREAKING:** `shell::scripted::ScriptedShell` renamed to `OverlayScriptedShell`. The new name reflects the type's narrow scope — it only scripts `Shell::run_command` to drive the spinner overlay. Every other `Shell` method (`shell_exec`, `command_exists`, `command_output`, `exec_capture`, `exec_interactive`) now **panics** with an explanatory message instead of silently returning fake success. Tests that previously relied on the silent stubs were masking misuse; compose `OverlayScriptedShell` with `MockShell` (or your own `Shell` impl) when you need both overlay-rendered `run_command` calls and other shell behaviour.
-
-### Migration
-
-```rust
-// Before
-match parse_cli::<Cmd>() {
-    Ok(parsed) => run(parsed),
-    Err(CliError::ShowHelp(t))    => { print_help(&t);    exit(0); }
-    Err(CliError::ShowVersion(t)) => { print_version(&t); exit(0); }
-    Err(e) => { eprintln!("Error: {e}"); exit(1); }
-}
-
-// After
-match parse_cli::<Cmd>() {
-    Ok(CliOutcome::Parsed(parsed)) => run(parsed),
-    Ok(CliOutcome::Help(t))        => { print_help(&t);    exit(0); }
-    Ok(CliOutcome::Version(t))     => { print_version(&t); exit(0); }
-    Err(e) => { eprintln!("Error: {e}"); exit(1); }
-}
-```
-
----
-
-## [0.5.0] — 2026-05-09
+## [0.5.0] — 2026-05-11
 
 ### Changed
 
@@ -46,7 +17,9 @@ match parse_cli::<Cmd>() {
 - **BREAKING:** `output::file_stats` is now gated behind the default-off `file-stats` feature. Per-run file-operation telemetry is opt-in scope for this crate; consumers that use `FileStats` / `ShowBytes` must enable `features = ["file-stats"]`. Consumers that don't need file-op summaries get a slightly leaner build.
 - **BREAKING:** Renamed `paths::script_dir` → `paths::parent_dir_or_dot` and `paths::script_filename` → `paths::file_name_str`. The old names embedded one downstream consumer's "script" concept; the new names describe the operation. Behavior is unchanged.
 - **BREAKING:** `shell::shell_exec` (free function) now takes explicit `program: &str` and `flag: &str` arguments instead of hardcoding `bash`/`powershell`. Callers that previously relied on the platform default should call `ShellConfig::effective_shell_program()` to resolve the pair, or use the `Shell::shell_exec` trait method which now uses `ShellConfig` automatically.
-- **BREAKING (default behaviour):** `ProcessShell::shell_exec`, `exec_capture`, and `exec_interactive` no longer hardcode `bash -c` / `powershell -Command`. They now consult `ShellConfig::effective_shell_program()`, which on Unix prefers `$SHELL` (falling back to `bash`) and on Windows prefers `pwsh` → `powershell` → `cmd /c`. Pin the program explicitly via `ShellConfig { shell_program: Some((..., ...)), .. }` if you need the old behaviour.
+- **BREAKING (default behaviour):** `ProcessShell::shell_exec`, `exec_capture`, and `exec_interactive` no longer hardcode `bash -c` / `powershell -Command`. They now consult `ShellConfig::effective_shell_program()`, which on Unix prefers `$SHELL` (falling back to `bash`) and on Windows prefers `pwsh` → `powershell` → `cmd /c`. Pin the program explicitly via `ShellConfig { shell_program: Some((..., ...)), .. }` if you need the old behavior.
+- **BREAKING:** Help and version are no longer modeled as `CliError` variants. `cli::parse_cli` / `parse_cli_from` now return `Result<CliOutcome<C>, CliError>`, where the new `CliOutcome` enum carries the three success shapes (`Parsed(ParsedCli<C>)`, `Help(String)`, `Version(String)`). `CliError` shrinks to genuine errors only (`Usage`, `Conflict`); the `ShowHelp` and `ShowVersion` variants and their `show_help` / `show_version` constructors are gone. Sub-parsers that previously returned `Err(CliError::ShowHelp(...))` to surface help on unknown sub-subcommands should now return `Err(CliError::Usage(...))` pointing the user at `help <cmd>`, since `Result<C, CliError>` no longer has a non-error path.
+- **BREAKING:** `shell::scripted::ScriptedShell` renamed to `OverlayScriptedShell`. The new name reflects the type's narrow scope — it only scripts `Shell::run_command` to drive the spinner overlay. Every other `Shell` method (`shell_exec`, `command_exists`, `command_output`, `exec_capture`, `exec_interactive`) now **panics** with an explanatory message instead of silently returning fake success. Tests that previously relied on the silent stubs were masking misuse; compose `OverlayScriptedShell` with `MockShell` (or your own `Shell` impl) when you need both overlay-rendered `run_command` calls and other shell behaviour.
 
 ### Added
 
@@ -68,6 +41,22 @@ let cli = match parse_cli::<Cmd>() {
     Err(CliError::ShowVersion(text)) => { print_version(&text); std::process::exit(0); }
     Err(e) => { eprintln!("Error: {e}"); std::process::exit(1); }
 };
+
+// Before
+match parse_cli::<Cmd>() {
+    Ok(parsed) => run(parsed),
+    Err(CliError::ShowHelp(t))    => { print_help(&t);    exit(0); }
+    Err(CliError::ShowVersion(t)) => { print_version(&t); exit(0); }
+    Err(e) => { eprintln!("Error: {e}"); exit(1); }
+}
+
+// After
+match parse_cli::<Cmd>() {
+    Ok(CliOutcome::Parsed(parsed)) => run(parsed),
+    Ok(CliOutcome::Help(t))        => { print_help(&t);    exit(0); }
+    Ok(CliOutcome::Version(t))     => { print_version(&t); exit(0); }
+    Err(e) => { eprintln!("Error: {e}"); exit(1); }
+}
 ```
 
 ---
