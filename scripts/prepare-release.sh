@@ -69,12 +69,18 @@ HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "Authorization: $TOKEN" \
   -H "User-Agent: prepare-release.sh (jt-consoleutils)" \
   https://crates.io/api/v1/me)
-if [[ "$HTTP" != "200" ]]; then
-  echo "ERROR: crates.io rejected token (HTTP $HTTP)."
-  echo "       Refresh at https://crates.io/me/ and run: cargo login"
-  exit 1
-fi
-echo "  Token valid (crates.io HTTP 200)"
+# 200 = unscoped token; 403 = scoped token (recognized but /me is outside its
+# scopes — token is still valid for publish). 401 = expired/invalid token,
+# which is what we actually want to fail fast on.
+case "$HTTP" in
+  200) echo "  Token valid (crates.io HTTP 200, unscoped)" ;;
+  403) echo "  Token valid (crates.io HTTP 403, scoped — /me out of scope)" ;;
+  *)
+    echo "ERROR: crates.io rejected token (HTTP $HTTP)."
+    echo "       Refresh at https://crates.io/me/ and run: cargo login"
+    exit 1
+    ;;
+esac
 echo ""
 
 # ── 3. State-drift detection ────────────────────────────────────────────────
