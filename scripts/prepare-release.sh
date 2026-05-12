@@ -96,9 +96,22 @@ if grep -qE "^## \[${VERSION//./\\.}\]" CHANGELOG.md; then
   HAS_CHANGELOG_SECTION=true
 fi
 
+# Check README pin too — it's easy to commit a Cargo.toml bump and CHANGELOG
+# promotion while leaving the `crate = "X.Y"` install snippet stale, and the
+# published crates.io page surfaces that snippet prominently.
+CRATE_NAME=$(grep '^name = ' Cargo.toml | head -1 | sed 's/name = "\(.*\)"/\1/')
+MAJOR_MINOR="${VERSION%.*}"
+README_PIN_OK=true
+if grep -qE "^${CRATE_NAME} = \"[0-9]+\.[0-9]+\"" README.md; then
+  README_MM=$(grep -E "^${CRATE_NAME} = \"[0-9]+\.[0-9]+\"" README.md | head -1 | sed -E "s/^${CRATE_NAME} = \"([0-9]+\.[0-9]+)\"/\1/")
+  if [[ "$README_MM" != "$MAJOR_MINOR" ]]; then
+    README_PIN_OK=false
+  fi
+fi
+
 if [[ "$CURRENT_VERSION" == "$VERSION" ]]; then
-  if $HAS_CHANGELOG_SECTION; then
-    echo "  Cargo.toml at ${VERSION} and CHANGELOG.md already has [${VERSION}] section."
+  if $HAS_CHANGELOG_SECTION && $README_PIN_OK; then
+    echo "  Cargo.toml at ${VERSION}, CHANGELOG.md has [${VERSION}], README pin matches."
     echo "  Release is fully prepared — nothing to do."
     echo ""
     echo "==> Already prepared. Next steps:"
@@ -108,6 +121,8 @@ if [[ "$CURRENT_VERSION" == "$VERSION" ]]; then
   fi
   STATE="already-bumped"
   echo "  Cargo.toml already at ${VERSION} (skip bump, verify consistency)"
+  $HAS_CHANGELOG_SECTION || echo "  CHANGELOG.md missing [${VERSION}] section — will add"
+  $README_PIN_OK         || echo "  README.md pin is \"${README_MM}\", expected \"${MAJOR_MINOR}\" — will fix"
 elif [[ "$LOWER" == "$CURRENT_VERSION" ]]; then
   if $HAS_CHANGELOG_SECTION; then
     echo "ERROR: CHANGELOG.md has [${VERSION}] section but Cargo.toml is still at ${CURRENT_VERSION}."
@@ -205,10 +220,19 @@ echo ""
 
 # ── 6. Changelog: append commit list to [Unreleased] ────────────────────────
 
-echo "--- Updating CHANGELOG.md ---"
-
 PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 TODAY=$(date +%Y-%m-%d)
+
+if $HAS_CHANGELOG_SECTION; then
+  echo "--- CHANGELOG.md already has [${VERSION}] section — skipping changelog steps ---"
+  SKIP_CHANGELOG_STEPS=true
+else
+  SKIP_CHANGELOG_STEPS=false
+fi
+
+if ! $SKIP_CHANGELOG_STEPS; then
+
+echo "--- Updating CHANGELOG.md ---"
 
 if [[ -n "${PREV_TAG}" ]]; then
   COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --reverse)
@@ -307,6 +331,8 @@ path.write_text(text)
 PY
 echo "  Promoted"
 echo ""
+
+fi  # end SKIP_CHANGELOG_STEPS guard
 
 # ── 9. Commit (no tag, no push) ─────────────────────────────────────────────
 

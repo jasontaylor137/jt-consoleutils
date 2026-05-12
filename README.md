@@ -11,7 +11,7 @@ filesystem, signals) that every CLI ends up reinventing.
 
 ```toml
 [dependencies]
-jt-consoleutils = "0.4"
+jt-consoleutils = "0.5"
 ```
 
 ```rust
