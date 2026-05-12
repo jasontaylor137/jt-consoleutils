@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.5.1] — 2026-05-11
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Commits since v0.5.0
+
+- docs: bump README install pin to 0.5
+
 ## [0.5.0] — 2026-05-11
 
 ### Changed
@@ -159,6 +179,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.5.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.0...v0.5.1
 [0.4.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.1.0...v0.2.0
