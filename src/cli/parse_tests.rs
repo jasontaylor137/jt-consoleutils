@@ -43,9 +43,10 @@ impl CommandParser for TestCmd {
       "Test help text".to_string()
    }
 
-   fn command_help(cmd: &str, _args: &[String]) -> Option<String> {
-      match cmd {
-         "greet" => Some("Greet someone".to_string()),
+   fn command_help(cmd: &str, args: &[String]) -> Option<String> {
+      match (cmd, args.first().map(String::as_str)) {
+         ("greet", Some("formally")) => Some("Greet someone formally".to_string()),
+         ("greet", _) => Some("Greet someone".to_string()),
          _ => None
       }
    }
@@ -473,6 +474,22 @@ fn parse_cli_from_subcommand_then_help_returns_command_help() {
    match result {
       Ok(CliOutcome::Help(text)) => assert_eq!(text, "Greet someone"),
       other => panic!("expected Ok(Help(\"Greet someone\")), got {other:?}")
+   }
+}
+
+#[test]
+fn parse_cli_from_subcommand_with_nested_path_then_help_returns_nested_help() {
+   // Given: `greet formally --help` — the path typed between the subcommand and
+   // the help flag must reach command_help so *nested* help resolves.
+   let argv = sv(&["greet", "formally", "--help"]);
+
+   // When
+   let result = parse_cli_from::<TestCmd>(&argv);
+
+   // Then
+   match result {
+      Ok(CliOutcome::Help(text)) => assert_eq!(text, "Greet someone formally"),
+      other => panic!("expected nested command help, got {other:?}")
    }
 }
 

@@ -110,11 +110,16 @@ fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
 
    // -h / --help anywhere in args
    if args.iter().any(|a| a == "-h" || a == "--help") {
-      // If a subcommand precedes -h, show its help
-      if let Some(cmd) = args.iter().find(|a| C::subcommands().contains(&a.as_str()))
-         && let Some(text) = C::command_help(cmd, &[])
-      {
-         return Some(text);
+      // A subcommand before the help flag → show its help, passing the path
+      // typed between the subcommand and the flag so *nested* help resolves
+      // (e.g. `config show --help` → command_help("config", ["show"])), matching
+      // the `help config show` form.
+      if let Some(pos) = args.iter().position(|a| C::subcommands().contains(&a.as_str())) {
+         let after = &args[pos + 1..];
+         let end = after.iter().position(|a| a == "-h" || a == "--help").unwrap_or(after.len());
+         if let Some(text) = C::command_help(&args[pos], &after[..end]) {
+            return Some(text);
+         }
       }
       return Some(C::help_text());
    }

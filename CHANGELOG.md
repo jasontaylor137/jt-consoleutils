@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `<cmd> <sub> --help` now resolves nested command help (e.g. `app config show --help`), matching the `help config show` form. Previously the flag form discarded the path between the subcommand and the flag and fell back to the parent command's help.
+
 ## [0.5.1] — 2026-05-11
 
 ### Added
