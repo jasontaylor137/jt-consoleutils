@@ -13,12 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+## [0.5.2] — 2026-05-25
+
+### Added
+
+### Changed
+
 - Updated dependencies.
 
 ### Fixed
 
 - `<cmd> <sub> --help` now resolves nested command help (e.g. `app config show --help`), matching the `help config show` form. Previously the flag form discarded the path between the subcommand and the flag and fell back to the parent command's help.
 - The parent-process signal path now installs a real Ctrl+C/SIGINT handler instead of `SIG_IGN`. Because `SIG_IGN` is inherited across `exec`, spawned children (and their descendants) would otherwise have become immune to Ctrl+C; a handler is reset to the default in exec'd children, so they still terminate on Ctrl+C while the parent survives.
+
+### Commits since v0.5.1
+
+- update dependencies
+- fix(signals): install survive-Ctrl+C handler, not inherited SIG_IGN
+- fix(cli): resolve nested help for the '<cmd> <sub> --help' form
+- update version to 0.5.2
 
 ## [0.5.1] — 2026-05-11
 
@@ -184,6 +199,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.5.2]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.0...v0.5.1
 [0.4.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.2.0...v0.3.0
