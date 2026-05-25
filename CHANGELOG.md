@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated dependencies.
+
 ### Fixed
 
 - `<cmd> <sub> --help` now resolves nested command help (e.g. `app config show --help`), matching the `help config show` form. Previously the flag form discarded the path between the subcommand and the flag and fell back to the parent command's help.
+- The parent-process signal path now installs a real Ctrl+C/SIGINT handler instead of `SIG_IGN`. Because `SIG_IGN` is inherited across `exec`, spawned children (and their descendants) would otherwise have become immune to Ctrl+C; a handler is reset to the default in exec'd children, so they still terminate on Ctrl+C while the parent survives.
 
 ## [0.5.1] — 2026-05-11
 
