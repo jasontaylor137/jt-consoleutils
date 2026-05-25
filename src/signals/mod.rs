@@ -16,9 +16,12 @@
 //! [`crate::signals::SignalInstallError::AlreadyInstalled`] naming the
 //! original installer.
 //!
-//! On Windows the parent path uses
-//! `SetConsoleCtrlHandler(NULL, TRUE)` (ignore Ctrl+C); the interrupt path
-//! installs a `PHANDLER_ROUTINE` that sets the flag and returns `TRUE`.
+//! On Windows both paths install a `PHANDLER_ROUTINE` via
+//! `SetConsoleCtrlHandler`: the parent path's routine reports Ctrl+C as handled
+//! so the parent survives (a routine, unlike the inheritable
+//! `SetConsoleCtrlHandler(NULL, TRUE)` ignore-flag, is not inherited by
+//! children, so they still terminate on Ctrl+C); the interrupt path's routine
+//! sets the flag and returns `TRUE`.
 //!
 //! Caveat: SIGKILL / power loss are uncatchable. Stale state left behind in
 //! those cases must be cleaned up by the caller's own next-run logic.
@@ -203,6 +206,91 @@ mod tests {
       let err = install_interrupt_handler().expect_err("interrupt install should be rejected");
       let SignalInstallError::AlreadyInstalled { existing } = err;
       assert_eq!(existing, "install_parent_handlers");
+
+      reset_install_state_for_tests();
+   }
+
+   /// Regression (Ctrl+C propagation): the parent path must install a real
+   /// SIGINT *handler*, never SIG_IGN. SIG_IGN is inherited across `exec(2)`,
+   /// so every runtime the CLI spawns — and recursively their children — would
+   /// inherit it and the whole process tree would be immune to Ctrl+C. A
+   /// handler is reset to SIG_DFL in the exec'd child, so children still
+   /// terminate on Ctrl+C while the parent survives (its handler is a no-op).
+   #[cfg(unix)]
+   #[test]
+   fn parent_install_leaves_a_handler_not_sig_ign() {
+      let _guard = INSTALL_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+      reset_install_state_for_tests();
+
+      install_parent_handlers().expect("first install should succeed");
+
+      // Read back SIGINT's current disposition.
+      let mut current: libc::sigaction = unsafe { std::mem::zeroed() };
+      let rc = unsafe { libc::sigaction(libc::SIGINT, std::ptr::null(), &mut current) };
+      assert_eq!(rc, 0, "sigaction query should succeed");
+      assert_ne!(
+         current.sa_sigaction,
+         libc::SIG_IGN,
+         "parent installed SIG_IGN — children inherit it across exec and become immune to Ctrl+C"
+      );
+      assert_ne!(
+         current.sa_sigaction,
+         libc::SIG_DFL,
+         "parent left SIG_DFL — it would not survive Ctrl+C and its cleanup would not run"
+      );
+
+      reset_install_state_for_tests();
+   }
+
+   /// End-to-end proof of the above: after the parent installs its
+   /// survive-Ctrl+C handler, a process it spawns must still die when sent
+   /// SIGINT. Before the fix the child inherited SIG_IGN and ran to completion;
+   /// after the fix it inherits SIG_DFL and SIGINT kills it.
+   #[cfg(unix)]
+   #[test]
+   fn spawned_child_still_terminates_on_sigint() {
+      use std::{
+         os::unix::process::ExitStatusExt,
+         process::Command,
+         time::{Duration, Instant}
+      };
+
+      let _guard = INSTALL_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+      reset_install_state_for_tests();
+
+      install_parent_handlers().expect("install should succeed");
+
+      // Would run for 30s if it ignored the signal.
+      let mut child = Command::new("sleep").arg("30").spawn().expect("spawn `sleep`");
+
+      // Let it exec so it has inherited our SIGINT disposition.
+      std::thread::sleep(Duration::from_millis(150));
+
+      // Signal only this child (not our whole process group), the way a
+      // terminal delivers SIGINT to the foreground job.
+      let rc = unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) };
+      assert_eq!(rc, 0, "kill(child, SIGINT) should succeed");
+
+      // It must die promptly; poll so a regression fails fast instead of
+      // blocking the whole test run for 30s.
+      let start = Instant::now();
+      loop {
+         match child.try_wait().expect("try_wait") {
+            Some(status) => {
+               assert_eq!(status.signal(), Some(libc::SIGINT), "child should have been killed by SIGINT");
+               break;
+            }
+            None => {
+               if start.elapsed() >= Duration::from_secs(5) {
+                  let _ = child.kill();
+                  let _ = child.wait();
+                  reset_install_state_for_tests();
+                  panic!("child ignored SIGINT (inherited SIG_IGN) — still alive 5s after the signal");
+               }
+               std::thread::sleep(Duration::from_millis(20));
+            }
+         }
+      }
 
       reset_install_state_for_tests();
    }

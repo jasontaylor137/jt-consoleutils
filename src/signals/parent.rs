@@ -7,9 +7,19 @@
 //! cleanup code; the child still receives SIGINT directly from the terminal
 //! and exits on its own.
 //!
-//! On Windows the equivalent is `SetConsoleCtrlHandler(NULL, TRUE)` which
-//! tells the OS to ignore Ctrl+C events for this process. The child receives
-//! its own Ctrl+C event from the console.
+//! A handler is used rather than SIG_IGN on purpose. SIG_IGN is *inherited*
+//! across `exec(2)`, so every runtime the CLI spawns — and recursively their
+//! children — would inherit it and the whole process tree would become immune
+//! to Ctrl+C. A handler, by contrast, is reset to SIG_DFL in the exec'd child,
+//! so spawned children still terminate on Ctrl+C as intended.
+//!
+//! On Windows the parent installs a console control handler *routine* (via
+//! `SetConsoleCtrlHandler`) that reports Ctrl+C as handled so the parent
+//! survives. It deliberately does NOT use `SetConsoleCtrlHandler(NULL, TRUE)`,
+//! whose "ignore Ctrl+C" attribute "is inherited by child processes" (per the
+//! Win32 docs) and would likewise make every spawned runtime immune. A handler
+//! routine is a per-process function pointer and is not inherited, so each
+//! child still receives — and acts on — its own Ctrl+C event from the console.
 
 use super::{InstallSlot, SignalInstallError, try_claim_sigint};
 
@@ -33,8 +43,8 @@ pub fn install_parent_handlers() -> Result<(), SignalInstallError> {
 
 /// RAII guard that restores the default SIGINT behavior for its lifetime, so
 /// Ctrl+C aborts the process. Use this around interactive prompts: the global
-/// SIG_IGN that protects post-run cleanup would otherwise swallow Ctrl+C while
-/// the user is at a prompt, leaving them no way to abort.
+/// survive-Ctrl+C handler that protects post-run cleanup would otherwise
+/// swallow Ctrl+C while the user is at a prompt, leaving them no way to abort.
 pub struct SigintDefaultGuard {
    _private: ()
 }
@@ -63,17 +73,46 @@ impl Drop for SigintDefaultGuard {
 pub(crate) fn set_sigint_ignored(ignored: bool) {
    #[cfg(unix)]
    {
-      let handler = if ignored { libc::SIG_IGN } else { libc::SIG_DFL };
-      // SAFETY: install_sigint_action only touches SIGINT with a libc-provided
-      // handler value (SIG_IGN / SIG_DFL); both are valid for any signal slot.
+      // "Ignoring" installs a real (no-op) handler rather than SIG_IGN: a
+      // handler is reset to SIG_DFL across exec(2) so spawned children still
+      // die on Ctrl+C, whereas SIG_IGN is inherited and would make the whole
+      // process tree immune. `false` restores SIG_DFL (e.g. around prompts so
+      // Ctrl+C aborts).
+      let handler = if ignored { survive_sigint as *const () as libc::sighandler_t } else { libc::SIG_DFL };
+      // SAFETY: survive_sigint is async-signal-safe (empty body); SIG_DFL is
+      // always valid. Both are valid dispositions for the SIGINT slot.
       unsafe { super::install_sigint_action(handler) };
    }
 
    #[cfg(windows)]
    unsafe {
       use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
-      // Passing a null handler with TRUE installs the "ignore Ctrl+C" filter;
-      // FALSE removes it so the default terminate-on-Ctrl+C behavior returns.
-      SetConsoleCtrlHandler(None, if ignored { 1 } else { 0 });
+      // Add/remove a handler routine (TRUE/FALSE) rather than the inheritable
+      // SetConsoleCtrlHandler(NULL, TRUE) ignore-flag, so spawned children are
+      // not made immune to Ctrl+C. Removing the routine (FALSE) restores the
+      // default terminate-on-Ctrl+C behavior.
+      SetConsoleCtrlHandler(Some(survive_ctrl_c), if ignored { 1 } else { 0 });
+   }
+}
+
+/// No-op SIGINT handler that lets the parent survive Ctrl+C so its post-run
+/// cleanup can execute. Installed instead of SIG_IGN precisely because a
+/// handler is reset to SIG_DFL in `exec(2)`'d children while SIG_IGN is
+/// inherited. Async-signal-safe: the body is empty.
+#[cfg(unix)]
+extern "C" fn survive_sigint(_: libc::c_int) {}
+
+/// Windows console handler that lets the parent survive Ctrl+C / Ctrl+Break by
+/// reporting the event as handled (returns TRUE), suppressing the default
+/// terminate. Installed as a handler routine rather than the inheritable
+/// `SetConsoleCtrlHandler(NULL, TRUE)` ignore-flag so spawned children are not
+/// made immune to Ctrl+C.
+#[cfg(windows)]
+unsafe extern "system" fn survive_ctrl_c(ctrl_type: u32) -> windows_sys::core::BOOL {
+   use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT};
+   if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_BREAK_EVENT {
+      1 // TRUE: handled — the parent survives; default terminate is suppressed.
+   } else {
+      0 // FALSE: defer other control events (close, logoff, shutdown).
    }
 }
