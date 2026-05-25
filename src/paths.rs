@@ -186,9 +186,9 @@ pub fn file_name_str(path: &Path) -> Option<&str> {
 /// to convert anyway. This helper:
 ///
 /// - Returns `String` (display-ready) rather than `Option<&OsStr>`.
-/// - Falls back to the input `filename` when `file_stem` returns `None`
-///   (e.g. paths ending in `..`) **or** when the stem isn't valid UTF-8 —
-///   so callers can always render *something* without an extra match arm.
+/// - Falls back to the input `filename` when `file_stem` returns `None` (e.g. paths ending in `..`)
+///   **or** when the stem isn't valid UTF-8 — so callers can always render *something* without an
+///   extra match arm.
 /// - Strips only the last extension (so `"archive.tar.gz"` → `"archive.tar"`).
 #[must_use]
 pub fn strip_extension(filename: &str) -> String {
