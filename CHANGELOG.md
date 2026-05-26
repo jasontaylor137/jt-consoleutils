@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.5.3] — 2026-05-25
+
+### Added
+
 - `MockShell::mark_missing(program)` — marks a single program as absent so `command_exists(program)` returns `false` even when the global `command_exists_result` flag is `true`. Lets a test model a partial PATH (e.g. "ruby is on PATH but bundle is not") without flipping the all-or-nothing flag. Backed by a new public `missing_commands` field.
 
 ### Commits since v0.5.2
@@ -201,6 +209,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.5.3]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.0...v0.5.1
 [0.4.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.3.0...v0.4.0
