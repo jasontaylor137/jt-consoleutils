@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-### Changed
+- `MockShell::mark_missing(program)` — marks a single program as absent so `command_exists(program)` returns `false` even when the global `command_exists_result` flag is `true`. Lets a test model a partial PATH (e.g. "ruby is on PATH but bundle is not") without flipping the all-or-nothing flag. Backed by a new public `missing_commands` field.
 
-### Fixed
+### Commits since v0.5.2
+
+- MockShell::mark_missing
 
 ## [0.5.2] — 2026-05-25
 
