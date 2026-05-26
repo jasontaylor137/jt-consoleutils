@@ -21,6 +21,10 @@ pub struct MockShell {
    pub run_success: bool,
    /// Value returned by `command_exists`. Defaults to `true`.
    pub command_exists_result: bool,
+   /// Programs that `command_exists` reports as absent regardless of
+   /// `command_exists_result`. Lets a test model "ruby is on PATH but bundle
+   /// is not" without flipping the global flag. Populate via [`Self::mark_missing`].
+   pub missing_commands: RefCell<Vec<String>>,
    /// Stdout value returned by `command_output` when `command_output_ok` is `true`.
    pub command_output_value: String,
    /// When false, `command_output` returns `Err` (e.g. to simulate a tool not installed).
@@ -44,6 +48,7 @@ impl MockShell {
          calls: RefCell::new(Vec::new()),
          run_success: true,
          command_exists_result: true,
+         missing_commands: RefCell::new(Vec::new()),
          command_output_value: String::new(),
          command_output_ok: true,
          exec_capture_results: RefCell::new(VecDeque::new())
@@ -53,6 +58,12 @@ impl MockShell {
    /// Return a snapshot of all calls recorded so far.
    pub fn calls(&self) -> Vec<String> {
       self.calls.borrow().clone()
+   }
+
+   /// Mark `program` as absent so `command_exists(program)` returns `false`
+   /// even when `command_exists_result` is `true`.
+   pub fn mark_missing(&self, program: &str) {
+      self.missing_commands.borrow_mut().push(program.to_string());
    }
 
    /// Push a `CommandResult` onto the back of the `exec_capture` queue.
@@ -88,7 +99,10 @@ impl Shell for MockShell {
       Ok(CommandResult { success: self.run_success, code: None, stderr: String::new() })
    }
 
-   fn command_exists(&self, _program: &str) -> bool {
+   fn command_exists(&self, program: &str) -> bool {
+      if self.missing_commands.borrow().iter().any(|c| c == program) {
+         return false;
+      }
       self.command_exists_result
    }
 
@@ -226,6 +240,17 @@ mod tests {
       let mut shell = MockShell::new();
       shell.command_exists_result = false;
       assert!(!shell.command_exists("anything"));
+   }
+
+   #[test]
+   fn command_exists_false_for_marked_missing_only() {
+      // Given — global flag is true, but one command is marked missing
+      let shell = MockShell::new();
+      shell.mark_missing("bundle");
+
+      // Then — only the marked command is absent
+      assert!(shell.command_exists("ruby"));
+      assert!(!shell.command_exists("bundle"));
    }
 
    // -----------------------------------------------------------------------
