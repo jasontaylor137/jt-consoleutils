@@ -29,8 +29,6 @@ pub enum Trailing {
       /// Target text rendered in dim.
       target: String
    },
-   /// Pre-rendered count phrase: `"2 deps"` or `"1 environment"`.
-   Count(String),
    /// Bare object — already in `subject`; render nothing.
    None
 }
@@ -47,6 +45,11 @@ pub struct ActionBuilder<'a> {
    out: &'a mut (dyn Output + 'a),
    verb: String,
    subject: Option<String>,
+   /// Optional count phrase (`"2 deps"`) rendered between the verb and any
+   /// trailing preposition. Held separately from `trailing` so a count and a
+   /// `to`/`from` target compose (`Removed 2 deps from x`) instead of one
+   /// clobbering the other.
+   count: Option<String>,
    trailing: Trailing,
    note: Note,
    hint: Hint,
@@ -65,7 +68,7 @@ impl<'a> ActionBuilder<'a> {
       colors: bool,
       theme: RenderTheme
    ) -> Self {
-      Self { out, verb, subject, trailing: Trailing::None, note: None, hint: None, colors, theme }
+      Self { out, verb, subject, count: None, trailing: Trailing::None, note: None, hint: None, colors, theme }
    }
 
    /// Trailing path with arrow separator: ` → /some/path`.
@@ -86,9 +89,10 @@ impl<'a> ActionBuilder<'a> {
       self
    }
 
-   /// Trailing count phrase: ` <n> <noun.singular|plural>`.
+   /// Count phrase rendered after the verb: ` <n> <noun.singular|plural>`.
+   /// Composes with a trailing `to`/`from` target.
    pub fn count<N: AsNoun>(mut self, n: usize, noun: N) -> Self {
-      self.trailing = Trailing::Count(count_phrase(n, noun.singular(), noun.plural()));
+      self.count = Some(count_phrase(n, noun.singular(), noun.plural()));
       self
    }
 
@@ -155,6 +159,7 @@ impl Drop for ActionBuilder<'_> {
       let line = render::render_action(
          &self.verb,
          self.subject.as_deref(),
+         self.count.as_deref(),
          &self.trailing,
          &self.note,
          &self.hint,
@@ -162,5 +167,32 @@ impl Drop for ActionBuilder<'_> {
          &self.theme
       );
       self.out.writeln(&line);
+   }
+}
+
+#[cfg(test)]
+mod tests {
+   use super::*;
+   use crate::{output::StringOutput, vocab::AsNoun};
+
+   struct Deps;
+   impl AsNoun for Deps {
+      fn singular(&self) -> &str {
+         "dep"
+      }
+      fn plural(&self) -> &str {
+         "deps"
+      }
+   }
+
+   #[test]
+   fn count_and_from_compose_in_a_summary_line() {
+      // Given / When — a summary that both counts an aggregate and names the
+      // source it was removed from.
+      let mut out = StringOutput::new();
+      out.summary("Removed").count(2, Deps).from("script.hs");
+
+      // Then — the count is NOT clobbered by the `from` preposition.
+      assert_eq!(out.log().trim_end(), "✓ Removed 2 deps from script.hs");
    }
 }

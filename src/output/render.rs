@@ -97,9 +97,14 @@ pub type Hint = Option<String>;
 ///
 /// Pattern: `<success_glyph> <Verb> <subject>[ <trailing>][ (<note>)][ <em_dash> <hint>]`
 #[must_use]
+// Assembles one action line from independent optional parts (subject, count,
+// trailing preposition, note, hint); the arity is inherent to the format, not
+// a design smell, so the long signature is allowed here.
+#[allow(clippy::too_many_arguments)]
 pub fn render_action(
    verb: &str,
    subject: Option<&str>,
+   count: Option<&str>,
    trailing: &Trailing,
    note: &Note,
    hint: &Hint,
@@ -115,6 +120,9 @@ pub fn render_action(
    if let Some(subj) = subject {
       let _ = write!(s, " {subj}");
    }
+   if let Some(count) = count {
+      let _ = write!(s, " {count}");
+   }
    match trailing {
       Trailing::ArrowPath(p) => {
          if colors {
@@ -126,9 +134,6 @@ pub fn render_action(
       Trailing::PrepTo(target) => write_prep(&mut s, theme.prep_to, target, colors),
       Trailing::PrepFrom(target) => write_prep(&mut s, theme.prep_from, target, colors),
       Trailing::PrepCustom { word, target } => write_prep(&mut s, word, target, colors),
-      Trailing::Count(text) => {
-         let _ = write!(s, " {text}");
-      }
       Trailing::None => {}
    }
    if let Some(n) = note {
@@ -229,7 +234,7 @@ mod tests {
    #[test]
    fn render_action_minimal_no_colors() {
       // Given / When
-      let s = render_action("Edited", Some("deploy.ts"), &Trailing::None, &None, &None, false, &DEFAULT_THEME);
+      let s = render_action("Edited", Some("deploy.ts"), None, &Trailing::None, &None, &None, false, &DEFAULT_THEME);
 
       // Then
       assert_eq!(s, "✓ Edited deploy.ts");
@@ -241,6 +246,7 @@ mod tests {
       let s = render_action(
          "Installed",
          Some("deploy"),
+         None,
          &Trailing::ArrowPath("~/.sr/bin/deploy".to_string()),
          &None,
          &None,
@@ -258,6 +264,7 @@ mod tests {
       let s = render_action(
          "Added",
          Some("lodash@4.17.21"),
+         None,
          &Trailing::PrepTo("deploy.ts".to_string()),
          &None,
          &None,
@@ -270,13 +277,30 @@ mod tests {
    }
 
    #[test]
-   fn render_action_with_count_and_prep_no_colors() {
-      // Given / When
-      let s =
-         render_action("Removed", None, &Trailing::Count("2 deps".to_string()), &None, &None, false, &DEFAULT_THEME);
+   fn render_action_with_count_only_no_colors() {
+      // Given / When — a subject-less aggregate count, no trailing preposition.
+      let s = render_action("Removed", None, Some("2 deps"), &Trailing::None, &None, &None, false, &DEFAULT_THEME);
 
       // Then
       assert_eq!(s, "✓ Removed 2 deps");
+   }
+
+   #[test]
+   fn render_action_with_count_and_prep_no_colors() {
+      // Given / When — count and a `from` target must both render, in order.
+      let s = render_action(
+         "Removed",
+         None,
+         Some("2 deps"),
+         &Trailing::PrepFrom("script.hs".to_string()),
+         &None,
+         &None,
+         false,
+         &DEFAULT_THEME
+      );
+
+      // Then
+      assert_eq!(s, "✓ Removed 2 deps from script.hs");
    }
 
    #[test]
@@ -285,6 +309,7 @@ mod tests {
       let s = render_action(
          "Edited",
          Some("deploy.ts"),
+         None,
          &Trailing::None,
          &Some("switched from auth.ts".to_string()),
          &Some("run 'sr unedit' when done".to_string()),
@@ -345,7 +370,7 @@ mod tests {
    #[test]
    fn render_action_with_colors_includes_ansi() {
       // Given / When
-      let s = render_action("Edited", Some("deploy.ts"), &Trailing::None, &None, &None, true, &DEFAULT_THEME);
+      let s = render_action("Edited", Some("deploy.ts"), None, &Trailing::None, &None, &None, true, &DEFAULT_THEME);
 
       // Then
       assert!(s.contains("\x1b[32m\u{2713}\x1b[0m"));
@@ -358,6 +383,7 @@ mod tests {
       let action = render_action(
          "Edited",
          Some("deploy.ts"),
+         None,
          &Trailing::PrepTo("auth.ts".to_string()),
          &None,
          &Some("then redeploy".to_string()),
@@ -399,6 +425,7 @@ mod tests {
       let prep_to = render_action(
          "Ajouté",
          Some("lodash"),
+         None,
          &Trailing::PrepTo("deploy.ts".to_string()),
          &None,
          &None,
@@ -408,6 +435,7 @@ mod tests {
       let prep_from = render_action(
          "Retiré",
          Some("lodash"),
+         None,
          &Trailing::PrepFrom("deploy.ts".to_string()),
          &None,
          &None,
@@ -428,6 +456,7 @@ mod tests {
       let s = render_action(
          "Compiled",
          Some("main.rs"),
+         None,
          &Trailing::PrepCustom { word: "into", target: "main.o".to_string() },
          &None,
          &None,
