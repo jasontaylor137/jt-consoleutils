@@ -135,7 +135,9 @@ mod tests {
    use std::sync::Mutex;
 
    use super::*;
-   use crate::signals::{interrupt::INTERRUPTED, parent::set_sigint_ignored};
+   use crate::signals::interrupt::INTERRUPTED;
+   #[cfg(unix)]
+   use crate::signals::parent::set_sigint_ignored;
 
    /// Tests that mutate INSTALL_STATE or the actual SIGINT slot must serialize
    /// — cargo test runs them in parallel and the slot is process-global.

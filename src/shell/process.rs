@@ -75,7 +75,9 @@ impl Shell for ProcessShell {
 
 #[cfg(test)]
 mod tests {
+   #[cfg(unix)]
    use super::{ProcessShell, Shell, ShellConfig};
+   #[cfg(unix)]
    use crate::output::{OutputMode, StringOutput};
 
    #[cfg(unix)]

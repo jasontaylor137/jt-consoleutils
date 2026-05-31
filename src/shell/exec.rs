@@ -398,6 +398,7 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 #[cfg(test)]
 mod tests {
    use super::*;
+   #[cfg(unix)]
    use crate::output::StringOutput;
 
    /// Under `cargo test`, stdout is not a terminal, so `run_command` in default
