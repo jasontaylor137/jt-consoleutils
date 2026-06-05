@@ -16,10 +16,12 @@
 //! JSON string and the intermediate `JsonValue` allocation is wasteful.
 
 mod deserialize;
+mod edit;
 mod error;
 mod escape;
 mod ops;
 mod parser;
+mod scan;
 mod serialize;
 mod to_json;
 /// The [`JsonValue`] enum and convenience impls.
@@ -32,6 +34,7 @@ pub use deserialize::{
    optional_nested, optional_string, optional_string_map, optional_string_vec, optional_vec_of, require_f64,
    require_string
 };
+pub use edit::{EditError, jsonc_get, jsonc_set, jsonc_unset};
 pub use error::JsonError;
 pub use ops::{json_deep_merge, json_remove_paths};
 pub use parser::{parse_json, parse_jsonc};

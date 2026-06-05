@@ -60,41 +60,16 @@ pub(crate) fn strip_jsonc(input: &str) -> String {
 
       // strings: copy verbatim, including escapes
       if b == b'"' {
-         out.push('"');
-         i += 1;
-         while i < len {
-            let c = bytes[i];
-            out.push(c as char);
-            i += 1;
-            if c == b'\\' && i < len {
-               out.push(bytes[i] as char);
-               i += 1;
-            } else if c == b'"' {
-               break;
-            }
-         }
+         let end = super::scan::scan_string(bytes, i);
+         out.push_str(&input[i..end]);
+         i = end;
          continue;
       }
 
-      // line comment
-      if b == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
-         i += 2;
-         while i < len && bytes[i] != b'\n' {
-            i += 1;
-         }
-         continue;
-      }
-
-      // block comment
-      if b == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-         i += 2;
-         while i + 1 < len {
-            if bytes[i] == b'*' && bytes[i + 1] == b'/' {
-               i += 2;
-               break;
-            }
-            i += 1;
-         }
+      // line or block comment: drop it
+      let clen = super::scan::comment_len(bytes, i);
+      if clen != 0 {
+         i += clen;
          continue;
       }
 
