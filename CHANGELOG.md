@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.6.0] — 2026-06-06
+
+### Added
+
+- Span-aware, comment-preserving JSONC editor in the `json` module: `jsonc_get`, `jsonc_set`, `jsonc_unset`, and the `EditError` type. The editor navigates only the addressed path over the raw source bytes and splices the single addressed span, so comments, key order, and all formatting outside that span are preserved byte-for-byte.
+  - `jsonc_get(src, path)` returns the raw value slice for a path (scalars come back with their quotes), or `None` if absent.
+  - `jsonc_set(src, path, value)` replaces an existing value, appends a new member, or synthesizes the missing parent-object chain — detecting the file's indentation unit (spaces/tabs) and re-indenting inserted `JsonValue` fragments to match. An empty or blank source starts from `{}`.
+  - `jsonc_unset(src, path)` removes a member surgically: it never prunes a parent left empty, keeps comment lines above the removed key, and correctly fixes up commas (including the hard case where the previous member's comma sits after a comment).
+  - Schema-awareness, value typing, and validation are left to the caller: paths arrive pre-split into object-key segments and values arrive as `JsonValue`.
+
+### Changed
+
+- Extracted the low-level JSONC byte primitives (`scan_string`, `comment_len`, `skip_trivia`) into a shared `scan` module. The `strip_jsonc` comment-stripping pre-pass in the parser now reuses these instead of carrying its own duplicated string/comment scanning logic.
+- **Breaking:** the `output::action::Trailing` enum no longer has a `Count` variant, and `output::render::render_action` takes an additional `count: Option<&str>` argument. Count phrases are now tracked independently of the trailing preposition (see Fixed). Downstream code that constructed `Trailing::Count` or called `render_action` directly must be updated; consumers using `ActionBuilder` (`.count(...)`, `.to(...)`, `.from(...)`) are unaffected at the source level.
+
+### Fixed
+
+- Action summaries now compose a count with a `to`/`from` target instead of one clobbering the other: `Removed 2 deps from script.hs` renders correctly, where previously the count and the preposition could not both appear. The count is held separately from the trailing preposition and rendered between the verb and the trailing target.
+- Silenced unused-import warnings in `shell` and `signals` tests on Windows by gating Unix-only test imports behind `#[cfg(unix)]`.
+
 ## [0.5.3] — 2026-05-25
 
 ### Added
@@ -209,6 +229,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.6.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.0...v0.5.1
