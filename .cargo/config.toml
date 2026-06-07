@@ -1,0 +1,5 @@
+# Disable incremental compilation. This is a small library crate with fast
+# builds, so the incremental cache buys little while generating thousands of
+# un-GC'd session-cache files in target/. Matches the filebydaterust setup.
+[build]
+incremental = false
