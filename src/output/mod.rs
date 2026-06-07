@@ -177,6 +177,7 @@ fn format_elapsed(ms: u128) -> String {
 #[cfg(any(feature = "verbose", feature = "trace"))]
 #[derive(Copy, Clone)]
 enum Dim {
+   #[cfg(feature = "trace")]
    Yes,
    No
 }
@@ -187,6 +188,7 @@ fn with_prefix(prefix: &str, msg: &str, dim: Dim) -> String {
    let mut out = String::new();
    for l in msg.lines() {
       match dim {
+         #[cfg(feature = "trace")]
          Dim::Yes => {
             let _ = writeln!(out, "\x1b[2m{prefix}{l}\x1b[0m");
          }
