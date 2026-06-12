@@ -1,12 +1,15 @@
 use std::{
    io::{self, BufRead, IsTerminal},
    process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio},
-   sync::mpsc,
    thread,
    time::{Duration, Instant}
 };
 
-use super::{CommandResult, ShellError, helpers::format_command};
+use super::{
+   CommandResult, ShellError,
+   helpers::format_command,
+   line_queue::{LineReceiver, LineSender, RecvTimeout, line_channel}
+};
 use crate::{
    output::{Output, OutputMode},
    terminal::overlay
@@ -38,7 +41,7 @@ pub(super) struct RenderedOverlay {
 
 struct SpawnedCommand {
    child: Child,
-   lines: mpsc::Receiver<Line>,
+   lines: LineReceiver,
    /// Each reader is paired with a static label (`"stdout"` / `"stderr"`) so a
    /// panicked thread surfaces in [`ShellError::ReaderPanic`] with enough
    /// context to debug. Without the label, the join error is an opaque `Any`.
@@ -216,7 +219,7 @@ fn run_overlay(
 /// Drive the animated spinner overlay from a pre-built line receiver.
 /// Returns viewport, collected stderr lines, and elapsed time.
 /// Callers are responsible for calling `output.step_result` afterward.
-pub(super) fn render_overlay_lines(label: &str, lines: &mpsc::Receiver<Line>, viewport_size: usize) -> RenderedOverlay {
+pub(super) fn render_overlay_lines(label: &str, lines: &LineReceiver, viewport_size: usize) -> RenderedOverlay {
    let mut stderr_lines: Vec<String> = Vec::new();
    let mut viewport: Vec<String> = Vec::new();
    let start = Instant::now();
@@ -252,12 +255,12 @@ pub(super) fn render_overlay_lines(label: &str, lines: &mpsc::Receiver<Line>, vi
                last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size)
                   .unwrap_or(last_rows);
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
+            Err(RecvTimeout::Timeout) => {
                frame += 1;
                last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size)
                   .unwrap_or(last_rows);
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => break
+            Err(RecvTimeout::Disconnected) => break
          }
       }
 
@@ -284,7 +287,7 @@ fn spawn_command_with_lines(program: &str, args: &[&str]) -> Result<SpawnedComma
       .take()
       .ok_or_else(|| ShellError::Spawn(program.to_string(), io::Error::other("stderr is not piped")))?;
 
-   let (tx, rx) = mpsc::channel::<Line>();
+   let (tx, rx) = line_channel();
    let readers = spawn_line_readers(child_stdout, child_stderr, tx);
 
    Ok(SpawnedCommand { child, lines: rx, readers })
@@ -293,7 +296,7 @@ fn spawn_command_with_lines(program: &str, args: &[&str]) -> Result<SpawnedComma
 fn spawn_line_readers(
    stdout: ChildStdout,
    stderr: ChildStderr,
-   tx: mpsc::Sender<Line>
+   tx: LineSender
 ) -> Vec<(&'static str, thread::JoinHandle<()>)> {
    let tx_stderr = tx.clone();
 
@@ -338,7 +341,7 @@ fn spawn_line_readers(
    vec![("stdout", stdout_reader), ("stderr", stderr_reader)]
 }
 
-fn collect_stderr_lines(lines: mpsc::Receiver<Line>, mut on_line: impl FnMut(&str)) -> Vec<String> {
+fn collect_stderr_lines(lines: LineReceiver, mut on_line: impl FnMut(&str)) -> Vec<String> {
    let mut stderr_lines = Vec::new();
 
    for line in lines {

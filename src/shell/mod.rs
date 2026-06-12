@@ -25,6 +25,7 @@ use crate::output::{Output, OutputMode};
 mod dry;
 mod exec;
 mod helpers;
+mod line_queue;
 mod mock;
 mod process;
 pub mod scripted;

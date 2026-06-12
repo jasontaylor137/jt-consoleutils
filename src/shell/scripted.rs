@@ -19,11 +19,12 @@
 //! [`MockShell`]: super::MockShell
 #![allow(dead_code)]
 
-use std::{cell::RefCell, collections::VecDeque, sync::mpsc, thread, time::Duration};
+use std::{cell::RefCell, collections::VecDeque, thread, time::Duration};
 
 use super::{
    CommandResult, Shell, ShellConfig, ShellError,
-   exec::{Line, render_overlay_lines}
+   exec::{Line, render_overlay_lines},
+   line_queue::{LineSender, line_channel}
 };
 use crate::output::{Output, OutputMode};
 
@@ -228,7 +229,7 @@ impl Shell for OverlayScriptedShell {
          )));
       };
 
-      let (tx, rx) = mpsc::channel::<Line>();
+      let (tx, rx) = line_channel();
       let success = script.success;
 
       thread::spawn(move || {
@@ -315,7 +316,7 @@ fn unsupported(method: &str) -> String {
 /// (i.e. no `\r` follows) are embedded `\n` characters treated as line breaks.
 ///
 /// Any text after the final terminator remains buffered for the next call.
-fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &mpsc::Sender<Line>) {
+fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &LineSender) {
    // Split on \r first to identify CR-terminated chunks.
    let mut segments = s.split('\r').peekable();
 
@@ -366,12 +367,14 @@ fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &mpsc::Sender<Line>) {
 
 #[cfg(test)]
 mod tests {
-   use std::sync::mpsc;
 
    use super::{Line, OverlayScriptedShell, Script, feed};
    use crate::{
       output::{OutputMode, StringOutput},
-      shell::{Shell, ShellConfig}
+      shell::{
+         Shell, ShellConfig,
+         line_queue::{LineReceiver, line_channel}
+      }
    };
 
    // -----------------------------------------------------------------------
@@ -383,14 +386,14 @@ mod tests {
    }
 
    /// Drain a channel into a Vec, classifying each Line.
-   fn collect_lines(rx: mpsc::Receiver<Line>) -> Vec<Line> {
-      rx.into_iter().collect()
+   fn collect_lines(rx: LineReceiver) -> Vec<Line> {
+      rx.collect()
    }
 
    /// Convenience: run feed() on `input` starting with an empty buffer,
    /// collect every Line sent on the channel, and return (lines, remaining_buf).
    fn feed_all(input: &str, is_stderr: bool) -> (Vec<Line>, String) {
-      let (tx, rx) = mpsc::channel::<Line>();
+      let (tx, rx) = line_channel();
       let mut buf = String::new();
       feed(input, &mut buf, is_stderr, &tx);
       drop(tx);
@@ -429,7 +432,7 @@ mod tests {
 
    #[test]
    fn feed_partial_line_flushed_by_subsequent_newline() {
-      let (tx, rx) = mpsc::channel::<Line>();
+      let (tx, rx) = line_channel();
       let mut buf = String::new();
       feed("partial", &mut buf, false, &tx);
       feed(" line\n", &mut buf, false, &tx);

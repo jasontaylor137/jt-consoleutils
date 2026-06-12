@@ -164,6 +164,18 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, FsError> {
    Ok(true)
 }
 
+/// Non-generic core shared by [`read_json_file`] / [`read_jsonc_file`]: the
+/// file read, parse, and error contextualization monomorphize once instead of
+/// once per target type `T` (the generic wrappers shrink to a `T::from_json_value`
+/// call on this result).
+fn read_json_value(
+   path: &Path,
+   parse: fn(&str) -> Result<json::JsonValue, JsonError>
+) -> Result<json::JsonValue, FsError> {
+   let content = std::fs::read_to_string(path).map_err(|e| FsError::read(path, e))?;
+   parse(&content).map_err(|e| FsError::parse(path, e))
+}
+
 /// Read and parse a JSON file at `path` into `T`.
 ///
 /// # Errors
@@ -171,10 +183,8 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, FsError> {
 /// Returns [`FsError::Read`] if the file cannot be read, or [`FsError::Parse`]
 /// if it cannot be parsed as JSON or converted into `T`.
 pub fn read_json_file<T: FromJsonValue>(path: &Path) -> Result<T, FsError> {
-   let content = std::fs::read_to_string(path).map_err(|e| FsError::read(path, e))?;
-   let value = json::parse_json(&content).map_err(|e| FsError::parse(path, e))?;
-   let parsed = T::from_json_value(&value).map_err(|e| FsError::parse(path, e))?;
-   Ok(parsed)
+   let value = read_json_value(path, json::parse_json)?;
+   T::from_json_value(&value).map_err(|e| FsError::parse(path, e))
 }
 
 /// Read and parse a JSONC file (JSON with `//` / `/* */` comments and
@@ -185,10 +195,8 @@ pub fn read_json_file<T: FromJsonValue>(path: &Path) -> Result<T, FsError> {
 /// Returns [`FsError::Read`] if the file cannot be read, or [`FsError::Parse`]
 /// if it cannot be parsed as JSONC or converted into `T`.
 pub fn read_jsonc_file<T: FromJsonValue>(path: &Path) -> Result<T, FsError> {
-   let content = std::fs::read_to_string(path).map_err(|e| FsError::read(path, e))?;
-   let value = json::parse_jsonc(&content).map_err(|e| FsError::parse(path, e))?;
-   let parsed = T::from_json_value(&value).map_err(|e| FsError::parse(path, e))?;
-   Ok(parsed)
+   let value = read_json_value(path, json::parse_jsonc)?;
+   T::from_json_value(&value).map_err(|e| FsError::parse(path, e))
 }
 
 /// Serialize `value` as pretty JSON and write it to `path` with a trailing newline.
