@@ -1,7 +1,5 @@
-use std::collections::BTreeMap;
-
 use super::*;
-use crate::json::JsonValue;
+use crate::json::{JsonMap, JsonValue};
 
 #[test]
 fn serialize_null() {
@@ -46,7 +44,7 @@ fn serialize_string_with_escapes() {
 
 #[test]
 fn serialize_empty_object() {
-   assert_eq!(to_json_pretty(&JsonValue::Object(BTreeMap::new())), "{}");
+   assert_eq!(to_json_pretty(&JsonValue::Object(JsonMap::new())), "{}");
 }
 
 #[test]
@@ -56,28 +54,28 @@ fn serialize_empty_array() {
 
 #[test]
 fn serialize_simple_object() {
-   let mut map = BTreeMap::new();
+   let mut map = JsonMap::new();
    map.insert("key".into(), JsonValue::String("value".into()));
    let out = to_json_pretty(&JsonValue::Object(map));
    assert_eq!(out, "{\n  \"key\": \"value\"\n}");
 }
 
 #[test]
-fn serialize_object_keys_sorted() {
-   let mut map = BTreeMap::new();
+fn serialize_object_keys_in_insertion_order() {
+   let mut map = JsonMap::new();
    map.insert("b".into(), JsonValue::Number("2".into()));
    map.insert("a".into(), JsonValue::Number("1".into()));
    let out = to_json_pretty(&JsonValue::Object(map));
-   assert_eq!(out, "{\n  \"a\": 1,\n  \"b\": 2\n}");
+   assert_eq!(out, "{\n  \"b\": 2,\n  \"a\": 1\n}");
 }
 
 #[test]
 fn serialize_nested_object() {
-   let mut inner = BTreeMap::new();
+   let mut inner = JsonMap::new();
    inner.insert("c".into(), JsonValue::Bool(true));
-   let mut outer = BTreeMap::new();
+   let mut outer = JsonMap::new();
    outer.insert("b".into(), JsonValue::Object(inner));
-   let mut root = BTreeMap::new();
+   let mut root = JsonMap::new();
    root.insert("a".into(), JsonValue::Object(outer));
    let out = to_json_pretty(&JsonValue::Object(root));
    assert_eq!(out, "{\n  \"a\": {\n    \"b\": {\n      \"c\": true\n    }\n  }\n}");

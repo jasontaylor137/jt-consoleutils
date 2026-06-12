@@ -540,13 +540,10 @@ mod tests {
 
    #[test]
    fn matches_to_json_pretty_for_equivalent_data() {
-      use std::collections::BTreeMap;
+      use crate::json::{JsonMap, JsonValue, to_json_pretty};
 
-      use crate::json::{JsonValue, to_json_pretty};
-
-      // Build the same shape via both paths. Use keys in alphabetical order
-      // so that BTreeMap (sorted) and StructSerializer (insertion order) emit
-      // the same key sequence; this test isolates indentation, not ordering.
+      // Build the same shape via both paths — both emit in insertion order,
+      // so this test isolates indentation.
       let mut s = StructSerializer::new();
       s.field_str("a", "x");
       s.field_array_str("b", &["one".to_string(), "two".to_string()]);
@@ -559,13 +556,13 @@ mod tests {
       });
       let from_struct = s.finish();
 
-      let mut deepest = BTreeMap::new();
+      let mut deepest = JsonMap::new();
       deepest.insert("g".to_string(), JsonValue::Number("1".to_string()));
-      let mut middle = BTreeMap::new();
+      let mut middle = JsonMap::new();
       middle.insert("d".to_string(), JsonValue::String("v".to_string()));
       middle.insert("e".to_string(), JsonValue::Array(vec![JsonValue::String("x".to_string())]));
       middle.insert("f".to_string(), JsonValue::Object(deepest));
-      let mut top = BTreeMap::new();
+      let mut top = JsonMap::new();
       top.insert("a".to_string(), JsonValue::String("x".to_string()));
       top.insert(
          "b".to_string(),

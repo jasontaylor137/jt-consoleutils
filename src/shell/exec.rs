@@ -315,12 +315,12 @@ fn spawn_line_readers(
                b'\n' => {
                   let line = String::from_utf8_lossy(&buf).into_owned();
                   buf.clear();
-                  let _ = tx.send(Line::Stdout(line));
+                  tx.send(Line::Stdout(line));
                }
                b'\r' => {
                   let segment = String::from_utf8_lossy(&buf).into_owned();
                   buf.clear();
-                  let _ = tx.send(Line::StdoutCr(segment));
+                  tx.send(Line::StdoutCr(segment));
                }
                _ => buf.push(b)
             }
@@ -328,13 +328,13 @@ fn spawn_line_readers(
       }
       // Flush any remaining text without a terminator.
       if !buf.is_empty() {
-         let _ = tx.send(Line::Stdout(String::from_utf8_lossy(&buf).into_owned()));
+         tx.send(Line::Stdout(String::from_utf8_lossy(&buf).into_owned()));
       }
    });
 
    let stderr_reader = thread::spawn(move || {
       for line in io::BufReader::new(stderr).lines().map_while(Result::ok) {
-         let _ = tx_stderr.send(Line::Stderr(line));
+         tx_stderr.send(Line::Stderr(line));
       }
    });
 

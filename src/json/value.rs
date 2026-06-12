@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use super::map::JsonMap;
 
-/// Lightweight JSON value type. Uses `BTreeMap` for objects so keys are
-/// always sorted (matches `serde_json`'s pretty-print ordering).
+/// Lightweight JSON value type. Objects preserve insertion order (source
+/// order for parsed documents) via [`JsonMap`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsonValue {
-   /// A JSON object with sorted keys.
-   Object(BTreeMap<String, JsonValue>),
+   /// A JSON object, keys in insertion order.
+   Object(JsonMap),
    /// A JSON array.
    Array(Vec<JsonValue>),
    /// A JSON string.
@@ -25,7 +25,7 @@ impl JsonValue {
 
    /// Create an empty object.
    pub fn object() -> Self {
-      JsonValue::Object(BTreeMap::new())
+      JsonValue::Object(JsonMap::new())
    }
 
    /// Create a string value.
@@ -35,7 +35,7 @@ impl JsonValue {
 
    /// Build an object from key-value pairs.
    pub fn obj(pairs: &[(&str, JsonValue)]) -> Self {
-      let mut map = BTreeMap::new();
+      let mut map = JsonMap::new();
       for (k, v) in pairs {
          map.insert(k.to_string(), v.clone());
       }
@@ -86,7 +86,7 @@ impl JsonValue {
    }
 
    /// Return the inner object map, if this is an object.
-   pub fn as_object(&self) -> Option<&BTreeMap<String, JsonValue>> {
+   pub fn as_object(&self) -> Option<&JsonMap> {
       match self {
          JsonValue::Object(m) => Some(m),
          _ => None
@@ -94,7 +94,7 @@ impl JsonValue {
    }
 
    /// Return a mutable reference to the inner object map.
-   pub fn as_object_mut(&mut self) -> Option<&mut BTreeMap<String, JsonValue>> {
+   pub fn as_object_mut(&mut self) -> Option<&mut JsonMap> {
       match self {
          JsonValue::Object(m) => Some(m),
          _ => None
@@ -235,8 +235,8 @@ impl From<Vec<JsonValue>> for JsonValue {
    }
 }
 
-impl From<BTreeMap<String, JsonValue>> for JsonValue {
-   fn from(m: BTreeMap<String, JsonValue>) -> Self {
+impl From<JsonMap> for JsonValue {
+   fn from(m: JsonMap) -> Self {
       JsonValue::Object(m)
    }
 }

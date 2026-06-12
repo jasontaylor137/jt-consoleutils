@@ -246,10 +246,10 @@ impl Shell for OverlayScriptedShell {
 
          // Flush any remaining buffered text (no trailing newline).
          if !stdout_buf.is_empty() {
-            let _ = tx.send(Line::Stdout(std::mem::take(&mut stdout_buf)));
+            tx.send(Line::Stdout(std::mem::take(&mut stdout_buf)));
          }
          if !stderr_buf.is_empty() {
-            let _ = tx.send(Line::Stderr(std::mem::take(&mut stderr_buf)));
+            tx.send(Line::Stderr(std::mem::take(&mut stderr_buf)));
          }
          // tx dropped here → receiver disconnects → overlay loop exits
       });
@@ -330,7 +330,7 @@ fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &LineSender) {
             for ch in seg.chars() {
                if ch == '\n' {
                   let line = std::mem::take(buf);
-                  let _ = tx.send(Line::Stderr(line));
+                  tx.send(Line::Stderr(line));
                } else {
                   buf.push(ch);
                }
@@ -339,7 +339,7 @@ fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &LineSender) {
             for ch in seg.chars() {
                if ch == '\n' {
                   let line = std::mem::take(buf);
-                  let _ = tx.send(Line::Stdout(line));
+                  tx.send(Line::Stdout(line));
                } else {
                   buf.push(ch);
                }
@@ -353,9 +353,9 @@ fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &LineSender) {
          let line = std::mem::take(buf);
          if is_stderr {
             // Treat \r as \n for stderr (shouldn't normally occur).
-            let _ = tx.send(Line::Stderr(line));
+            tx.send(Line::Stderr(line));
          } else {
-            let _ = tx.send(Line::StdoutCr(line));
+            tx.send(Line::StdoutCr(line));
          }
       }
    }

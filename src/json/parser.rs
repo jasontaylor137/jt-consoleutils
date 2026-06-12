@@ -23,9 +23,7 @@
 //! - JSON5 escape sequences beyond the standard JSON set (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`,
 //!   `\t`, `\uXXXX`).
 
-use std::collections::BTreeMap;
-
-use super::{error::JsonError, value::JsonValue};
+use super::{error::JsonError, map::JsonMap, value::JsonValue};
 
 /// Parse a JSON string into a `JsonValue`.
 pub fn parse_json(input: &str) -> Result<JsonValue, JsonError> {
@@ -175,7 +173,7 @@ impl<'a> Parser<'a> {
       self.advance(); // skip '{'
       self.skip_ws();
 
-      let mut map = BTreeMap::new();
+      let mut map = JsonMap::new();
 
       if self.peek() == Some(b'}') {
          self.advance();

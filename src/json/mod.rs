@@ -19,6 +19,7 @@ mod deserialize;
 mod edit;
 mod error;
 mod escape;
+mod map;
 mod ops;
 mod parser;
 mod scan;
@@ -36,6 +37,7 @@ pub use deserialize::{
 };
 pub use edit::{EditError, jsonc_get, jsonc_set, jsonc_unset};
 pub use error::JsonError;
+pub use map::JsonMap;
 pub use ops::{json_deep_merge, json_remove_paths};
 pub use parser::{parse_json, parse_jsonc};
 pub use serialize::to_json_pretty;

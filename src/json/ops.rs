@@ -6,8 +6,7 @@ pub fn json_deep_merge(base: &mut JsonValue, overlay: &JsonValue) {
    match (base, overlay) {
       (JsonValue::Object(base_map), JsonValue::Object(overlay_map)) => {
          for (key, overlay_val) in overlay_map {
-            let entry = base_map.entry(key.clone()).or_insert(JsonValue::Null);
-            json_deep_merge(entry, overlay_val);
+            json_deep_merge(base_map.or_insert(key, JsonValue::Null), overlay_val);
          }
       }
       (base, overlay) => {

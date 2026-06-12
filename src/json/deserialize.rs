@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-use super::{error::JsonError, value::JsonValue};
+use super::{error::JsonError, map::JsonMap, value::JsonValue};
 
 /// Trait for types that can be constructed from a `JsonValue`.
 pub trait FromJsonValue: Sized {
@@ -19,12 +19,12 @@ fn type_err(context: &str, key: &str, expected: &str, found: &str) -> JsonError 
 
 /// Expect the value to be an object; return its map and a key tracker for
 /// deny_unknown_fields validation.
-pub fn expect_object<'a>(value: &'a JsonValue, context: &str) -> Result<&'a BTreeMap<String, JsonValue>, JsonError> {
+pub fn expect_object<'a>(value: &'a JsonValue, context: &str) -> Result<&'a JsonMap, JsonError> {
    value.as_object().ok_or_else(|| JsonError::value(format!("{context}: expected object, got {}", value.type_name())))
 }
 
 /// Check for unknown fields given a set of known camelCase key names.
-pub fn deny_unknown_fields(map: &BTreeMap<String, JsonValue>, known: &[&str], context: &str) -> Result<(), JsonError> {
+pub fn deny_unknown_fields(map: &JsonMap, known: &[&str], context: &str) -> Result<(), JsonError> {
    for key in map.keys() {
       if !known.contains(&key.as_str()) {
          return Err(JsonError::value(format!("{context}: unknown field '{key}'")));
@@ -34,7 +34,7 @@ pub fn deny_unknown_fields(map: &BTreeMap<String, JsonValue>, known: &[&str], co
 }
 
 /// Extract a required string field.
-pub fn require_string(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<String, JsonError> {
+pub fn require_string(map: &JsonMap, key: &str, context: &str) -> Result<String, JsonError> {
    match map.get(key) {
       Some(JsonValue::String(s)) => Ok(s.clone()),
       Some(other) => Err(type_err(context, key, "string", other.type_name())),
@@ -43,11 +43,7 @@ pub fn require_string(map: &BTreeMap<String, JsonValue>, key: &str, context: &st
 }
 
 /// Extract an optional string field.
-pub fn optional_string(
-   map: &BTreeMap<String, JsonValue>,
-   key: &str,
-   context: &str
-) -> Result<Option<String>, JsonError> {
+pub fn optional_string(map: &JsonMap, key: &str, context: &str) -> Result<Option<String>, JsonError> {
    match map.get(key) {
       Some(JsonValue::String(s)) => Ok(Some(s.clone())),
       Some(JsonValue::Null) | None => Ok(None),
@@ -56,7 +52,7 @@ pub fn optional_string(
 }
 
 /// Extract a required `f64` numeric field.
-pub fn require_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<f64, JsonError> {
+pub fn require_f64(map: &JsonMap, key: &str, context: &str) -> Result<f64, JsonError> {
    match map.get(key) {
       Some(JsonValue::Number(s)) => {
          s.parse::<f64>().map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'")))
@@ -67,7 +63,7 @@ pub fn require_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) 
 }
 
 /// Extract an optional `f64` numeric field. Missing or `null` → `None`.
-pub fn optional_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<f64>, JsonError> {
+pub fn optional_f64(map: &JsonMap, key: &str, context: &str) -> Result<Option<f64>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Number(s)) => {
          s.parse::<f64>().map(Some).map_err(|_| JsonError::value(format!("{context}.{key}: invalid number '{s}'")))
@@ -79,7 +75,7 @@ pub fn optional_f64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str)
 
 /// Extract an optional `i64` numeric field. Missing or `null` → `None`. Non-integer
 /// numeric values (e.g. `1.5`) are rejected.
-pub fn optional_i64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<i64>, JsonError> {
+pub fn optional_i64(map: &JsonMap, key: &str, context: &str) -> Result<Option<i64>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Number(s)) => s
          .parse::<i64>()
@@ -91,7 +87,7 @@ pub fn optional_i64(map: &BTreeMap<String, JsonValue>, key: &str, context: &str)
 }
 
 /// Extract an optional bool field.
-pub fn optional_bool(map: &BTreeMap<String, JsonValue>, key: &str, context: &str) -> Result<Option<bool>, JsonError> {
+pub fn optional_bool(map: &JsonMap, key: &str, context: &str) -> Result<Option<bool>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Bool(b)) => Ok(Some(*b)),
       Some(JsonValue::Null) | None => Ok(None),
@@ -100,11 +96,7 @@ pub fn optional_bool(map: &BTreeMap<String, JsonValue>, key: &str, context: &str
 }
 
 /// Extract an optional `Vec<String>` field.
-pub fn optional_string_vec(
-   map: &BTreeMap<String, JsonValue>,
-   key: &str,
-   context: &str
-) -> Result<Option<Vec<String>>, JsonError> {
+pub fn optional_string_vec(map: &JsonMap, key: &str, context: &str) -> Result<Option<Vec<String>>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Array(arr)) => {
          let mut out = Vec::with_capacity(arr.len());
@@ -128,7 +120,7 @@ pub fn optional_string_vec(
 
 /// Extract an optional `HashMap<String, String>` field.
 pub fn optional_string_map(
-   map: &BTreeMap<String, JsonValue>,
+   map: &JsonMap,
    key: &str,
    context: &str
 ) -> Result<Option<HashMap<String, String>>, JsonError> {
@@ -156,11 +148,7 @@ pub fn optional_string_map(
 ///
 /// Inner errors are wrapped with `"{context}.{key}: "` so the path to the
 /// failing field is visible in the error message.
-pub fn optional_nested<T: FromJsonValue>(
-   map: &BTreeMap<String, JsonValue>,
-   key: &str,
-   context: &str
-) -> Result<Option<T>, JsonError> {
+pub fn optional_nested<T: FromJsonValue>(map: &JsonMap, key: &str, context: &str) -> Result<Option<T>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Null) | None => Ok(None),
       Some(v) => T::from_json_value(v).map(Some).map_err(|e| JsonError::value(format!("{context}.{key}: {e}")))
@@ -172,7 +160,7 @@ pub fn optional_nested<T: FromJsonValue>(
 /// Inner errors are wrapped with `"{context}.{key}.{k}: "` so the path to
 /// the failing entry is visible in the error message.
 pub fn optional_map_of<T: FromJsonValue>(
-   map: &BTreeMap<String, JsonValue>,
+   map: &JsonMap,
    key: &str,
    context: &str
 ) -> Result<Option<HashMap<String, T>>, JsonError> {
@@ -194,11 +182,7 @@ pub fn optional_map_of<T: FromJsonValue>(
 ///
 /// Inner errors are wrapped with `"{context}.{key}[{i}]: "` so the path to
 /// the failing element is visible in the error message.
-pub fn optional_vec_of<T: FromJsonValue>(
-   map: &BTreeMap<String, JsonValue>,
-   key: &str,
-   context: &str
-) -> Result<Option<Vec<T>>, JsonError> {
+pub fn optional_vec_of<T: FromJsonValue>(map: &JsonMap, key: &str, context: &str) -> Result<Option<Vec<T>>, JsonError> {
    match map.get(key) {
       Some(JsonValue::Array(arr)) => {
          let mut out = Vec::with_capacity(arr.len());
@@ -231,7 +215,7 @@ mod tests {
       }
    }
 
-   fn parse_object(s: &str) -> BTreeMap<String, JsonValue> {
+   fn parse_object(s: &str) -> JsonMap {
       match parse_json(s).unwrap() {
          JsonValue::Object(m) => m,
          _ => panic!("expected object")
