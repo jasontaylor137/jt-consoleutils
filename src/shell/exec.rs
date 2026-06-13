@@ -5,9 +5,10 @@ use std::{
    time::{Duration, Instant}
 };
 
+#[cfg(feature = "verbose")]
+use super::helpers::format_command;
 use super::{
    CommandResult, ShellError,
-   helpers::format_command,
    line_queue::{LineReceiver, LineSender, RecvTimeout, line_channel}
 };
 use crate::{
@@ -78,38 +79,6 @@ pub fn run_command(
       return run_non_tty(label, program, args, output, viewport_size);
    }
    run_overlay(label, program, args, output, viewport_size)
-}
-
-/// Run a command with stdout and stderr inherited from the parent process.
-///
-/// Use this for read-only inspection commands (e.g. `outdated`) where the
-/// output should be displayed directly to the user without any spinner or
-/// prefix decoration.
-///
-/// # Errors
-///
-/// Returns a [`ShellError`] if the process cannot be spawned or waited on.
-pub fn run_passthrough(
-   program: &str,
-   args: &[&str],
-   output: &mut dyn Output,
-   mode: OutputMode
-) -> Result<CommandResult, ShellError> {
-   if mode.is_dry_run() {
-      output.dry_run_shell(&format_command(program, args));
-      return Ok(CommandResult::fake(true));
-   }
-
-   let status = Command::new(program)
-      .args(args)
-      .stdout(Stdio::inherit())
-      .stderr(Stdio::inherit())
-      .spawn()
-      .map_err(|e| ShellError::Spawn(program.to_string(), e))?
-      .wait()
-      .map_err(|e| ShellError::Wait(program.to_string(), e))?;
-
-   Ok(CommandResult { success: status.success(), code: status.code(), stderr: String::new() })
 }
 
 /// Quiet mode: collect output silently, no terminal rendering.

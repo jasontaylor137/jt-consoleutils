@@ -7,9 +7,9 @@ use crate::output::{Output, OutputMode};
 
 /// Join `program` and `args` into a single space-separated string.
 ///
-/// Used internally for dry-run logging and mock call recording. Visible to the
-/// rest of the crate so sibling modules (e.g. `exec`) can format spawn lines.
-pub(crate) fn format_command(program: &str, args: &[&str]) -> String {
+/// The companion to [`command_parts`]: render a spawn line for a dry-run
+/// announcement or log, e.g. `output.dry_run_shell(&format_command(p, &args))`.
+pub fn format_command(program: &str, args: &[&str]) -> String {
    std::iter::once(program).chain(args.iter().copied()).collect::<Vec<_>>().join(" ")
 }
 

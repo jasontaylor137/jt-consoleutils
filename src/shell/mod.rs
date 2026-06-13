@@ -31,8 +31,8 @@ mod process;
 pub mod scripted;
 
 pub use dry::DryRunShell;
-pub use exec::{run_command, run_passthrough};
-pub use helpers::{command_exists, command_output, command_parts, shell_exec};
+pub use exec::run_command;
+pub use helpers::{command_exists, command_output, command_parts, format_command, shell_exec};
 pub use mock::MockShell;
 pub use process::ProcessShell;
 
