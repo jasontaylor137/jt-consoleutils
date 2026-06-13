@@ -35,13 +35,6 @@ struct MemberSpan {
    value_end: usize
 }
 
-#[cfg(test)]
-impl MemberSpan {
-   fn value_start_for_test(&self) -> usize {
-      self.value_start
-   }
-}
-
 struct ObjectScan {
    open: usize,
    close: usize,

@@ -161,16 +161,6 @@ fn write_prep(s: &mut String, word: &str, target: &str, colors: bool) {
    }
 }
 
-/// Render a failed action line.
-#[must_use]
-pub fn render_action_failed(label: &str, colors: bool, theme: &RenderTheme) -> String {
-   if colors {
-      format!("{RED}{}{RESET} {BOLD}{}{RESET} {label}", theme.error_glyph, theme.error_label)
-   } else {
-      format!("{} {} {label}", theme.error_glyph, theme.error_label)
-   }
-}
-
 /// Render a state line: `<state_glyph> <msg>`.
 #[must_use]
 pub fn render_state(msg: &str, colors: bool, theme: &RenderTheme) -> String {

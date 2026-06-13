@@ -22,7 +22,7 @@ fn scan_object_value_end_covers_nested_object() {
    let src = "{ \"b\": { \"c\": 2 } }";
    let obj = scan_object(src.as_bytes(), 0).unwrap();
    let b = &obj.members[0];
-   assert_eq!(&src[b.value_start_for_test()..b.value_end], "{ \"c\": 2 }");
+   assert_eq!(&src[b.value_start..b.value_end], "{ \"c\": 2 }");
 }
 
 #[test]
