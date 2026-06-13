@@ -97,7 +97,7 @@ pub fn run_passthrough(
 ) -> Result<CommandResult, ShellError> {
    if mode.is_dry_run() {
       output.dry_run_shell(&format_command(program, args));
-      return Ok(CommandResult { success: true, code: None, stderr: String::new() });
+      return Ok(CommandResult::fake(true));
    }
 
    let status = Command::new(program)
@@ -155,6 +155,29 @@ fn run_verbose(
    Ok(CommandResult { success: status.success(), code: status.code(), stderr: stderr_lines.join("\n") })
 }
 
+/// Apply one streamed [`Line`] to the running `viewport` and `stderr_lines`.
+/// `StdoutCr` overwrites the last viewport entry in place (progress-bar `\r`
+/// style), `Stderr` is recorded in both the viewport and the stderr collection,
+/// and `Stdout` appends. Shared by the TTY overlay and non-TTY paths so their
+/// viewport handling stays identical.
+fn apply_line(line: Line, viewport: &mut Vec<String>, stderr_lines: &mut Vec<String>) {
+   let text = line.text().to_string();
+   match line {
+      Line::StdoutCr(_) => {
+         if let Some(last) = viewport.last_mut() {
+            *last = text;
+         } else {
+            viewport.push(text);
+         }
+      }
+      Line::Stderr(s) => {
+         stderr_lines.push(s.clone());
+         viewport.push(s);
+      }
+      Line::Stdout(_) => viewport.push(text)
+   }
+}
+
 /// Default mode without a TTY: collect output silently, then emit a single
 /// `step_result` at the end. The spinner overlay has no meaningful
 /// non-interactive form (cursor moves and line erases are TTY-only), so we
@@ -172,21 +195,7 @@ fn run_non_tty(
    let mut stderr_lines: Vec<String> = Vec::new();
 
    for line in lines {
-      let text = line.text().to_string();
-      match line {
-         Line::StdoutCr(_) => {
-            if let Some(last) = viewport.last_mut() {
-               *last = text;
-            } else {
-               viewport.push(text);
-            }
-         }
-         Line::Stderr(s) => {
-            stderr_lines.push(s.clone());
-            viewport.push(s);
-         }
-         Line::Stdout(_) => viewport.push(text)
-      }
+      apply_line(line, &mut viewport, &mut stderr_lines);
    }
 
    let elapsed = start.elapsed();
@@ -233,24 +242,7 @@ pub(super) fn render_overlay_lines(label: &str, lines: &LineReceiver, viewport_s
       loop {
          match lines.recv_timeout(FRAME_INTERVAL) {
             Ok(line) => {
-               let text = line.text().to_string();
-               match line {
-                  Line::StdoutCr(_) => {
-                     // Overwrite the last viewport entry in place (progress-bar style).
-                     if let Some(last) = viewport.last_mut() {
-                        *last = text;
-                     } else {
-                        viewport.push(text);
-                     }
-                  }
-                  Line::Stderr(s) => {
-                     stderr_lines.push(s.clone());
-                     viewport.push(s);
-                  }
-                  Line::Stdout(_) => {
-                     viewport.push(text);
-                  }
-               }
+               apply_line(line, &mut viewport, &mut stderr_lines);
                frame += 1;
                last_rows = overlay::render_frame(&mut out, label, &viewport, frame, last_rows, viewport_size)
                   .unwrap_or(last_rows);

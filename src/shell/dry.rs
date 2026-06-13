@@ -25,12 +25,12 @@ impl Shell for DryRunShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       output.dry_run_shell(&format_command(program, args));
-      Ok(CommandResult { success: true, code: None, stderr: String::new() })
+      Ok(CommandResult::fake(true))
    }
 
    fn shell_exec(&self, script: &str, output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
       output.dry_run_shell(script);
-      Ok(CommandResult { success: true, code: None, stderr: String::new() })
+      Ok(CommandResult::fake(true))
    }
 
    fn command_exists(&self, program: &str) -> bool {
@@ -43,7 +43,7 @@ impl Shell for DryRunShell {
 
    fn exec_capture(&self, cmd: &str, output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
       output.dry_run_shell(cmd);
-      Ok(CommandResult { success: true, code: None, stderr: String::new() })
+      Ok(CommandResult::fake(true))
    }
 
    fn exec_interactive(&self, cmd: &str, output: &mut dyn Output, _mode: OutputMode) -> Result<(), ShellError> {

@@ -86,7 +86,7 @@ impl Shell for MockShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format_command(program, args));
-      Ok(CommandResult { success: self.run_success, code: None, stderr: String::new() })
+      Ok(CommandResult::fake(self.run_success))
    }
 
    fn shell_exec(
@@ -96,7 +96,7 @@ impl Shell for MockShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format!("shell_exec: {script}"));
-      Ok(CommandResult { success: self.run_success, code: None, stderr: String::new() })
+      Ok(CommandResult::fake(self.run_success))
    }
 
    fn command_exists(&self, program: &str) -> bool {
@@ -117,11 +117,8 @@ impl Shell for MockShell {
 
    fn exec_capture(&self, cmd: &str, _output: &mut dyn Output, _mode: OutputMode) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format!("exec_capture: {cmd}"));
-      let result = self.exec_capture_results.borrow_mut().pop_front().unwrap_or_else(|| CommandResult {
-         success: self.run_success,
-         code: None,
-         stderr: String::new()
-      });
+      let result =
+         self.exec_capture_results.borrow_mut().pop_front().unwrap_or_else(|| CommandResult::fake(self.run_success));
       Ok(result)
    }
 
@@ -311,11 +308,7 @@ mod tests {
    #[test]
    fn exec_capture_queue_consumed_in_order() {
       let shell = MockShell::new();
-      shell.exec_capture_results.borrow_mut().push_back(CommandResult {
-         success: true,
-         code: None,
-         stderr: String::new()
-      });
+      shell.exec_capture_results.borrow_mut().push_back(CommandResult::fake(true));
       shell.exec_capture_results.borrow_mut().push_back(CommandResult {
          success: false,
          code: None,

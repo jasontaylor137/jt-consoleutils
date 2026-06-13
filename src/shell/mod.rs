@@ -144,6 +144,13 @@ pub struct CommandResult {
 }
 
 impl CommandResult {
+   /// A fabricated result with no exit code and no captured stderr — used by the
+   /// dry-run, mock, and passthrough paths that report success/failure without
+   /// actually running (or capturing the output of) a process.
+   pub(crate) fn fake(success: bool) -> Self {
+      Self { success, code: None, stderr: String::new() }
+   }
+
    /// Return `Ok(())` if the command succeeded, or a `ShellError::Failed` whose
    /// message is `"{cmd} failed"`. Callers that want to embed app-specific advice
    /// (e.g. "run with --verbose") should use [`CommandResult::require_success_with_hint`]

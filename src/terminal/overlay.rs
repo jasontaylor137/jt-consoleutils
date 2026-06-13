@@ -2,10 +2,6 @@ use std::io::{self, Write};
 
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-fn term_width() -> usize {
-   super::terminal_width()
-}
-
 /// Treat `BrokenPipe` as success — the consumer end is gone (e.g. `head` cut
 /// us off) and there's no recovery, so a decorative spinner should just stop
 /// drawing rather than panic. Other errors propagate.
@@ -64,7 +60,7 @@ pub(crate) fn render_frame(
    prev_lines: usize,
    viewport_size: usize
 ) -> io::Result<usize> {
-   let tw = term_width();
+   let tw = super::terminal_width();
 
    let visual_rows: Vec<&str> = viewport.iter().flat_map(|s| s.split('\n')).collect();
    let shown_start = visual_rows.len().saturating_sub(viewport_size);
