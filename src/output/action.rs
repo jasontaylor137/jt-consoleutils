@@ -109,12 +109,13 @@ impl<'a> ActionBuilder<'a> {
    }
 }
 
-/// Extension trait that adds the typed [`OutputAction::action`] method to any
-/// type implementing [`Output`]. Because the method is generic over `AsVerb`,
-/// it cannot live on the dyn-compatible [`Output`] trait directly — this
-/// extension trait is auto-implemented for every concrete `Output` and
-/// separately for `dyn Output`, pulling the typed method into method-call
-/// position.
+/// Extension trait that adds the rendered line kinds to any type implementing
+/// [`Output`]. The core [`Output`] trait holds only the raw sinks and render
+/// config; everything that renders a themed line — `action`/`summary` plus the
+/// `state`/`hint`/`section`/`item`/`warn`/`error` kinds — lives here, built on
+/// top of `writeln`/`eprintln`/`colors_enabled`/`theme`. Auto-implemented for
+/// every concrete `Output` and separately for `dyn Output`, so the methods are
+/// callable in method position without bloating the [`Output`] vtable.
 pub trait OutputAction {
    /// Begin emitting an action line. Accepts any `impl AsVerb` (typically a
    /// project-specific `Verb` enum).
@@ -125,6 +126,26 @@ pub trait OutputAction {
    /// when the line describes an aggregate rather than a specific named
    /// subject.
    fn summary<V: crate::vocab::AsVerb>(&mut self, verb: V) -> ActionBuilder<'_>;
+
+   /// Emit a steady-state info line: `• <msg>`.
+   fn state(&mut self, msg: &str);
+
+   /// Emit a standalone hint line: `→ <msg>` (whole line dim).
+   fn hint(&mut self, msg: &str);
+
+   /// Emit a section header: bold title.
+   fn section(&mut self, title: &str);
+
+   /// Emit an item row under a section: 2-space indent, name, dim trailing.
+   fn item(&mut self, name: &str, trailing: &str);
+
+   /// Emit a non-fatal warning to **stderr**: `⚠ warn: <msg>`. Suppressed in
+   /// quiet mode (see [`Output::is_quiet`]); errors are not.
+   fn warn(&mut self, msg: &str);
+
+   /// Emit a fatal-error summary to **stderr**: `✗ error: <msg>`. Never
+   /// suppressed by quiet mode — errors always flow.
+   fn error(&mut self, msg: &str);
 }
 
 // Two impls are required: one for `dyn Output` (not `Sized`, so the generic
@@ -146,6 +167,39 @@ macro_rules! impl_output_action {
             let colors = self.colors_enabled();
             let theme = self.theme();
             ActionBuilder::new(self, verb.as_verb().to_string(), None, colors, theme)
+         }
+
+         fn state(&mut self, msg: &str) {
+            let line = render::render_state(msg, self.colors_enabled(), &self.theme());
+            self.writeln(&line);
+         }
+
+         fn hint(&mut self, msg: &str) {
+            let line = render::render_hint(msg, self.colors_enabled(), &self.theme());
+            self.writeln(&line);
+         }
+
+         fn section(&mut self, title: &str) {
+            let line = render::render_section(title, self.colors_enabled());
+            self.writeln(&line);
+         }
+
+         fn item(&mut self, name: &str, trailing: &str) {
+            let line = render::render_item(name, trailing, self.colors_enabled());
+            self.writeln(&line);
+         }
+
+         fn warn(&mut self, msg: &str) {
+            if self.is_quiet() {
+               return;
+            }
+            let line = render::render_warn(msg, self.colors_enabled(), &self.theme());
+            self.eprintln(&line);
+         }
+
+         fn error(&mut self, msg: &str) {
+            let line = render::render_error(msg, self.colors_enabled(), &self.theme());
+            self.eprintln(&line);
          }
       }
    };

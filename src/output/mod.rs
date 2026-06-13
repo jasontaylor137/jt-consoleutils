@@ -72,41 +72,11 @@ pub trait Output {
       DEFAULT_THEME
    }
 
-   /// Emit a steady-state info line: `• <msg>`.
-   fn state(&mut self, msg: &str) {
-      let line = render::render_state(msg, self.colors_enabled(), &self.theme());
-      self.writeln(&line);
-   }
-
-   /// Emit a standalone hint line: `→ <msg>` (whole line dim).
-   fn hint(&mut self, msg: &str) {
-      let line = render::render_hint(msg, self.colors_enabled(), &self.theme());
-      self.writeln(&line);
-   }
-
-   /// Emit a section header: bold title.
-   fn section(&mut self, title: &str) {
-      let line = render::render_section(title, self.colors_enabled());
-      self.writeln(&line);
-   }
-
-   /// Emit an item row under a section: 2-space indent, name, dim trailing.
-   fn item(&mut self, name: &str, trailing: &str) {
-      let line = render::render_item(name, trailing, self.colors_enabled());
-      self.writeln(&line);
-   }
-
-   /// Emit a non-fatal warning to **stderr**: `⚠ warn: <msg>`.
-   fn warn(&mut self, msg: &str) {
-      let line = render::render_warn(msg, self.colors_enabled(), &self.theme());
-      self.eprintln(&line);
-   }
-
-   /// Emit a fatal-error summary to **stderr**: `✗ error: <msg>`.
-   /// **Not suppressed by `--quiet`** — errors always flow.
-   fn error(&mut self, msg: &str) {
-      let line = render::render_error(msg, self.colors_enabled(), &self.theme());
-      self.eprintln(&line);
+   /// Returns `true` when this output is in quiet mode and should suppress
+   /// non-essential lines. Default: `false`. Gates [`warn`](Output::warn);
+   /// errors flow regardless of this flag.
+   fn is_quiet(&self) -> bool {
+      false
    }
 
    /// Returns `true` when verbose (or trace) output is active.

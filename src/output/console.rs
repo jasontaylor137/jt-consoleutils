@@ -110,12 +110,8 @@ impl Output for ConsoleOutput {
       self.theme
    }
 
-   fn warn(&mut self, msg: &str) {
-      if self.mode.is_quiet() {
-         return;
-      }
-      let line = super::render::render_warn(msg, self.colors_enabled, &self.theme);
-      eprintln!("{line}");
+   fn is_quiet(&self) -> bool {
+      self.mode.is_quiet()
    }
 
    #[cfg(feature = "verbose")]
