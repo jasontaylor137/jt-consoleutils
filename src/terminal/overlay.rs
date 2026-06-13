@@ -6,127 +6,6 @@ fn term_width() -> usize {
    super::terminal_width()
 }
 
-/// Animated spinner with a scrolling viewport, drawn directly to stdout.
-///
-/// Each call to [`Spinner::tick`] erases the previous frame, advances the spinner
-/// glyph, and redraws a header (`spinner-glyph label...`) followed by the last
-/// `viewport_size` lines pushed via [`Spinner::push_line`] /
-/// [`Spinner::replace_last_line`]. Lines wider than the terminal are truncated;
-/// embedded `\n` characters expand into multiple visual rows.
-///
-/// The spinner is drawn to the locked stdout — callers should avoid writing to
-/// stdout from other code paths between [`Spinner::tick`] calls or the rendered
-/// frame will be corrupted. Call [`Spinner::clear`] when done to erase the frame
-/// before printing a final summary line.
-///
-/// ```no_run
-/// use std::{io, thread, time::Duration};
-///
-/// use jt_consoleutils::terminal::overlay::Spinner;
-///
-/// fn run() -> io::Result<()> {
-///    let mut s = Spinner::new("downloading", 5);
-///    for i in 0..20 {
-///       s.push_line(format!("chunk {i} of 20"));
-///       s.tick()?;
-///       thread::sleep(Duration::from_millis(80));
-///    }
-///    s.clear()?;
-///    println!("done");
-///    Ok(())
-/// }
-/// ```
-pub struct Spinner {
-   label: String,
-   viewport: Vec<String>,
-   viewport_size: usize,
-   frame: usize,
-   last_rows: usize
-}
-
-impl Spinner {
-   /// Create a new spinner with the given header `label` and a viewport that
-   /// shows the most recent `viewport_size` lines. A `viewport_size` of `0`
-   /// renders only the header row.
-   #[must_use]
-   pub fn new(label: impl Into<String>, viewport_size: usize) -> Self {
-      Self { label: label.into(), viewport: Vec::new(), viewport_size, frame: 0, last_rows: 0 }
-   }
-
-   /// Replace the header label shown next to the spinner glyph. Takes effect on
-   /// the next [`Self::tick`] / [`Self::render`] call.
-   pub fn set_label(&mut self, label: impl Into<String>) {
-      self.label = label.into();
-   }
-
-   /// Append a new line to the viewport.
-   pub fn push_line(&mut self, line: impl Into<String>) {
-      self.viewport.push(line.into());
-   }
-
-   /// Overwrite the most recently pushed viewport line in place — the
-   /// equivalent of `\r` on a TTY. If the viewport is empty this pushes the
-   /// line instead.
-   pub fn replace_last_line(&mut self, line: impl Into<String>) {
-      let line = line.into();
-      if let Some(last) = self.viewport.last_mut() {
-         *last = line;
-      } else {
-         self.viewport.push(line);
-      }
-   }
-
-   /// Advance the spinner glyph by one frame and redraw.
-   ///
-   /// # Errors
-   ///
-   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
-   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
-   pub fn tick(&mut self) -> io::Result<()> {
-      self.frame = self.frame.wrapping_add(1);
-      self.draw()
-   }
-
-   /// Redraw without advancing the spinner glyph. Useful after a label or
-   /// viewport change when no animation tick is desired.
-   ///
-   /// # Errors
-   ///
-   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
-   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
-   pub fn render(&mut self) -> io::Result<()> {
-      self.draw()
-   }
-
-   /// Erase the current frame from the terminal. The spinner can be used again
-   /// after this — the frame counter is preserved so animation continues from
-   /// where it left off.
-   ///
-   /// # Errors
-   ///
-   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
-   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
-   pub fn clear(&mut self) -> io::Result<()> {
-      let stdout = io::stdout();
-      let mut out = stdout.lock();
-      clear_lines(&mut out, self.last_rows)?;
-      self.last_rows = 0;
-      Ok(())
-   }
-
-   /// # Errors
-   ///
-   /// Returns the underlying [`io::Error`] when stdout writes fail. A closed
-   /// pipe (e.g. piping to `head`) is treated as success and absorbed silently.
-   fn draw(&mut self) -> io::Result<()> {
-      let stdout = io::stdout();
-      let mut out = stdout.lock();
-      self.last_rows =
-         render_frame(&mut out, &self.label, &self.viewport, self.frame, self.last_rows, self.viewport_size)?;
-      Ok(())
-   }
-}
-
 /// Treat `BrokenPipe` as success — the consumer end is gone (e.g. `head` cut
 /// us off) and there's no recovery, so a decorative spinner should just stop
 /// drawing rather than panic. Other errors propagate.
@@ -258,7 +137,7 @@ mod tests {
 
    use rstest::rstest;
 
-   use super::{Spinner, ignore_broken_pipe, truncate_visible};
+   use super::{ignore_broken_pipe, truncate_visible};
 
    // -----------------------------------------------------------------------
    // ignore_broken_pipe — the pipeline-safety guarantee
@@ -280,41 +159,6 @@ mod tests {
    #[test]
    fn ok_passes_through() {
       assert!(ignore_broken_pipe(Ok(())).is_ok());
-   }
-
-   // -----------------------------------------------------------------------
-   // Spinner state transitions (rendering itself is not exercised — that
-   // writes to stdout and depends on a TTY)
-   // -----------------------------------------------------------------------
-
-   #[test]
-   fn push_line_appends_to_viewport() {
-      let mut s = Spinner::new("label", 5);
-      s.push_line("first");
-      s.push_line("second");
-      assert_eq!(s.viewport, vec!["first".to_string(), "second".to_string()]);
-   }
-
-   #[test]
-   fn replace_last_line_overwrites_when_viewport_nonempty() {
-      let mut s = Spinner::new("label", 5);
-      s.push_line("first");
-      s.replace_last_line("second");
-      assert_eq!(s.viewport, vec!["second".to_string()]);
-   }
-
-   #[test]
-   fn replace_last_line_pushes_when_viewport_empty() {
-      let mut s = Spinner::new("label", 5);
-      s.replace_last_line("only");
-      assert_eq!(s.viewport, vec!["only".to_string()]);
-   }
-
-   #[test]
-   fn set_label_replaces_label() {
-      let mut s = Spinner::new("before", 5);
-      s.set_label("after");
-      assert_eq!(s.label, "after");
    }
 
    // -----------------------------------------------------------------------

@@ -11,8 +11,7 @@ pub mod colors;
 /// Terminal width detection.
 pub mod width;
 
-/// Spinner + scrolling-viewport overlay. Used by the shell layer; also
-/// exposes a [`overlay::Spinner`] type for direct use without `Shell`.
+/// Scrolling-viewport overlay rendering used by the shell layer's spinner.
 pub mod overlay;
 
 pub use width::terminal_width;
