@@ -130,7 +130,7 @@ fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
 /// Extract global flags from args. `args` contains only the arguments after
 /// the program name. Returns `(trace, verbose, quiet, dry_run, filtered_args)`.
 #[allow(unused_mut)]
-pub(super) fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, Vec<String>) {
+fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, Vec<String>) {
    let mut trace = false;
    let mut verbose = false;
    let mut quiet = false;
@@ -164,7 +164,7 @@ pub(super) fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, 
 }
 
 /// Convert individual flag booleans to a [`LogLevel`].
-pub(super) fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLevel {
+fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLevel {
    #[cfg(feature = "trace")]
    if trace {
       return LogLevel::Trace;
@@ -181,7 +181,7 @@ pub(super) fn flags_to_level(trace: bool, verbose: bool, quiet: bool) -> LogLeve
 ///
 /// Caller guarantees `filtered` is non-empty; `parse_cli_inner` routes the
 /// empty case to [`CliOutcome::Help`] before reaching here.
-pub(super) fn dispatch<C: CommandParser>(filtered: &[String]) -> Result<C, CliError> {
+fn dispatch<C: CommandParser>(filtered: &[String]) -> Result<C, CliError> {
    let (first, rest) = filtered.split_first().expect("dispatch called with empty filtered args");
    let first = first.as_str();
 

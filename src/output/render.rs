@@ -161,6 +161,11 @@ fn write_prep(s: &mut String, word: &str, target: &str, colors: bool) {
    }
 }
 
+/// Format an elapsed-time count as `<ms>ms` under one second, else `<s>s`.
+pub(crate) fn format_elapsed(ms: u128) -> String {
+   if ms < 1000 { format!("{ms}ms") } else { format!("{}s", ms / 1000) }
+}
+
 /// Render a state line: `<state_glyph> <msg>`.
 #[must_use]
 pub fn render_state(msg: &str, colors: bool, theme: &RenderTheme) -> String {

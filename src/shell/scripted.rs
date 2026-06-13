@@ -326,23 +326,13 @@ fn feed(s: &str, buf: &mut String, is_stderr: bool, tx: &LineSender) {
       if is_last {
          // Tail after the last \r (or the whole string if no \r present).
          // Within this tail, \n characters are genuine line terminators.
-         if is_stderr {
-            for ch in seg.chars() {
-               if ch == '\n' {
-                  let line = std::mem::take(buf);
-                  tx.send(Line::Stderr(line));
-               } else {
-                  buf.push(ch);
-               }
-            }
-         } else {
-            for ch in seg.chars() {
-               if ch == '\n' {
-                  let line = std::mem::take(buf);
-                  tx.send(Line::Stdout(line));
-               } else {
-                  buf.push(ch);
-               }
+         let make = if is_stderr { Line::Stderr } else { Line::Stdout };
+         for ch in seg.chars() {
+            if ch == '\n' {
+               let line = std::mem::take(buf);
+               tx.send(make(line));
+            } else {
+               buf.push(ch);
             }
          }
       } else {

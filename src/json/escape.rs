@@ -15,8 +15,12 @@ pub(crate) fn push_json_string(out: &mut String, s: &str) {
          '\u{08}' => out.push_str("\\b"),
          '\u{0C}' => out.push_str("\\f"),
          c if c < '\u{20}' => {
-            let n = c as u32;
-            out.push_str(&format!("\\u{n:04x}"));
+            // Control chars are < U+0020, so the high byte is always `00`.
+            const HEX: &[u8; 16] = b"0123456789abcdef";
+            let n = c as usize;
+            out.push_str("\\u00");
+            out.push(HEX[n >> 4] as char);
+            out.push(HEX[n & 0xf] as char);
          }
          c => out.push(c)
       }

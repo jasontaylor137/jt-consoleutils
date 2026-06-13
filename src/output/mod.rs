@@ -26,6 +26,7 @@ pub mod trace;
 
 pub use console::ConsoleOutput;
 pub use mode::{LogLevel, OutputMode};
+pub(crate) use render::format_elapsed;
 pub use render::{ASCII_THEME, DEFAULT_THEME, RenderTheme};
 pub use string::StringOutput;
 
@@ -168,10 +169,6 @@ pub trait Output {
          self.emit_verbose(msg);
       }
    }
-}
-
-fn format_elapsed(ms: u128) -> String {
-   if ms < 1000 { format!("{ms}ms") } else { format!("{}s", ms / 1000) }
 }
 
 #[cfg(any(feature = "verbose", feature = "trace"))]
