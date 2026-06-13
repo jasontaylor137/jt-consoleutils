@@ -12,6 +12,6 @@ pub mod colors;
 pub mod width;
 
 /// Scrolling-viewport overlay rendering used by the shell layer's spinner.
-pub mod overlay;
+pub(crate) mod overlay;
 
 pub use width::terminal_width;
