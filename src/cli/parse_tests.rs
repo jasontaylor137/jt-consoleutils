@@ -92,13 +92,11 @@ fn extract_global_flags_no_flags() {
    let args = sv(&["list"]);
 
    // When
-   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(!trace);
-   assert!(!verbose);
-   assert!(!quiet);
-   assert!(!dry_run);
+   assert_eq!(mode.level, LogLevel::Normal);
+   assert!(!mode.dry_run);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -108,13 +106,11 @@ fn extract_global_flags_quiet_short() {
    let args = sv(&["-q", "list"]);
 
    // When
-   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(!trace);
-   assert!(!verbose);
-   assert!(quiet);
-   assert!(!dry_run);
+   assert_eq!(mode.level, LogLevel::Quiet);
+   assert!(!mode.dry_run);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -124,10 +120,10 @@ fn extract_global_flags_quiet_long() {
    let args = sv(&["--quiet", "list"]);
 
    // When
-   let (_trace, _verbose, quiet, _dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(quiet);
+   assert_eq!(mode.level, LogLevel::Quiet);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -137,10 +133,10 @@ fn extract_global_flags_dry_run_short() {
    let args = sv(&["-d", "list"]);
 
    // When
-   let (_trace, _verbose, _quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(dry_run);
+   assert!(mode.dry_run);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -150,10 +146,10 @@ fn extract_global_flags_dry_run_long() {
    let args = sv(&["--dry-run", "list"]);
 
    // When
-   let (_trace, _verbose, _quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(dry_run);
+   assert!(mode.dry_run);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -164,10 +160,10 @@ fn extract_global_flags_verbose_short() {
    let args = sv(&["-v", "list"]);
 
    // When
-   let (_trace, verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(verbose);
+   assert_eq!(mode.level, LogLevel::Verbose);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -178,10 +174,10 @@ fn extract_global_flags_verbose_long() {
    let args = sv(&["--verbose", "list"]);
 
    // When
-   let (_trace, verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(verbose);
+   assert_eq!(mode.level, LogLevel::Verbose);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -192,10 +188,10 @@ fn extract_global_flags_trace_short() {
    let args = sv(&["-t", "list"]);
 
    // When
-   let (trace, _verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(trace);
+   assert_eq!(mode.level, LogLevel::Trace);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -206,10 +202,10 @@ fn extract_global_flags_trace_long() {
    let args = sv(&["--trace", "list"]);
 
    // When
-   let (trace, _verbose, _quiet, _dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(trace);
+   assert_eq!(mode.level, LogLevel::Trace);
    assert_eq!(filtered, sv(&["list"]));
 }
 
@@ -219,10 +215,10 @@ fn extract_global_flags_separator_preserves_flags_after() {
    let args = sv(&["--", "-q", "extra"]);
 
    // When
-   let (_trace, _verbose, quiet, _dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then: -q after -- is not treated as a flag
-   assert!(!quiet);
+   assert_eq!(mode.level, LogLevel::Normal);
    assert_eq!(filtered, sv(&["--", "-q", "extra"]));
 }
 
@@ -232,13 +228,11 @@ fn extract_global_flags_empty_args() {
    let args: Vec<String> = sv(&[]);
 
    // When
-   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(!trace);
-   assert!(!verbose);
-   assert!(!quiet);
-   assert!(!dry_run);
+   assert_eq!(mode.level, LogLevel::Normal);
+   assert!(!mode.dry_run);
    assert!(filtered.is_empty());
 }
 
@@ -249,11 +243,11 @@ fn extract_global_flags_multiple_flags() {
    let args = sv(&["-v", "-d", "list"]);
 
    // When
-   let (_trace, verbose, _quiet, dry_run, filtered) = extract_global_flags(&args);
+   let (mode, filtered) = extract_global_flags(&args).unwrap();
 
    // Then
-   assert!(verbose);
-   assert!(dry_run);
+   assert_eq!(mode.level, LogLevel::Verbose);
+   assert!(mode.dry_run);
    assert_eq!(filtered, sv(&["list"]));
 }
 

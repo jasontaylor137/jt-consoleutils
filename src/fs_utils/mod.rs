@@ -256,15 +256,15 @@ pub fn same_content(a: &Path, b: &Path) -> bool {
 ///
 /// # Errors
 ///
-/// Returns an [`std::io::Error`] if the file metadata cannot be read or the
+/// Returns [`FsError::Chmod`] if the file metadata cannot be read or the
 /// permissions cannot be applied.
-pub fn make_executable(path: &Path) -> std::io::Result<()> {
+pub fn make_executable(path: &Path) -> Result<(), FsError> {
    #[cfg(unix)]
    {
       use std::os::unix::fs::PermissionsExt;
-      let mut perms = std::fs::metadata(path)?.permissions();
+      let mut perms = std::fs::metadata(path).map_err(|e| FsError::chmod(path, e))?.permissions();
       perms.set_mode(perms.mode() | 0o111);
-      std::fs::set_permissions(path, perms)?;
+      std::fs::set_permissions(path, perms).map_err(|e| FsError::chmod(path, e))?;
    }
    #[cfg(not(unix))]
    {

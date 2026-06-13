@@ -62,14 +62,7 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<CliOutcome<C>, C
       return Ok(CliOutcome::Help(text));
    }
 
-   let (trace, verbose, quiet, dry_run, filtered) = extract_global_flags(args);
-
-   if verbose && quiet {
-      return Err(CliError::conflict("--verbose and --quiet are mutually exclusive"));
-   }
-   if quiet && dry_run {
-      return Err(CliError::conflict("--quiet and --dry-run are mutually exclusive"));
-   }
+   let (mode, filtered) = extract_global_flags(args)?;
 
    if filtered.iter().any(|a| a == "--version") {
       return Ok(CliOutcome::Version(C::version()));
@@ -79,9 +72,6 @@ fn parse_cli_inner<C: CommandParser>(args: &[String]) -> Result<CliOutcome<C>, C
       // Only global flags were given (e.g. `app -v`) — show help.
       return Ok(CliOutcome::Help(C::help_text()));
    }
-
-   let level = flags_to_level(trace, verbose, quiet);
-   let mode = OutputMode { level, dry_run };
 
    let command = dispatch::<C>(&filtered)?;
    Ok(CliOutcome::Parsed(ParsedCli { mode, command }))
@@ -127,10 +117,16 @@ fn detect_help<C: CommandParser>(args: &[String]) -> Option<String> {
    None
 }
 
-/// Extract global flags from args. `args` contains only the arguments after
-/// the program name. Returns `(trace, verbose, quiet, dry_run, filtered_args)`.
-#[allow(unused_mut)]
-fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, Vec<String>) {
+/// Parse the global flags that precede a subcommand, reject mutually exclusive
+/// combinations, and build the resulting [`OutputMode`]. `args` contains only
+/// the arguments after the program name; the returned `Vec` is the remaining
+/// (non-global) arguments.
+///
+/// # Errors
+///
+/// Returns [`CliError::Conflict`] when `--verbose`/`--quiet` or
+/// `--quiet`/`--dry-run` are combined.
+fn extract_global_flags(args: &[String]) -> Result<(OutputMode, Vec<String>), CliError> {
    let mut trace = false;
    let mut verbose = false;
    let mut quiet = false;
@@ -160,7 +156,15 @@ fn extract_global_flags(args: &[String]) -> (bool, bool, bool, bool, Vec<String>
       }
    }
 
-   (trace, verbose, quiet, dry_run, filtered)
+   if verbose && quiet {
+      return Err(CliError::conflict("--verbose and --quiet are mutually exclusive"));
+   }
+   if quiet && dry_run {
+      return Err(CliError::conflict("--quiet and --dry-run are mutually exclusive"));
+   }
+
+   let level = flags_to_level(trace, verbose, quiet);
+   Ok((OutputMode { level, dry_run }, filtered))
 }
 
 /// Convert individual flag booleans to a [`LogLevel`].
