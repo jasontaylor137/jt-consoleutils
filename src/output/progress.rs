@@ -27,7 +27,7 @@
 //!    // do work...
 //!    bar.set_substatus("processing chunk 1/4", &mut out);
 //! }
-//! bar.finish(&mut out);
+//! bar.clear(&mut out);
 //! ```
 
 use std::time::{Duration, Instant};
@@ -117,12 +117,6 @@ impl Progress {
    /// that need to appear above the bar.
    pub fn redraw(&mut self, output: &mut dyn Output) {
       self.draw(output);
-   }
-
-   /// Erase the bar permanently. After this, [`Progress::next`] /
-   /// [`Progress::redraw`] will draw a fresh bar.
-   pub fn finish(&mut self, output: &mut dyn Output) {
-      self.clear(output);
    }
 
    /// Current step count (`0` initially, bumped by each [`Progress::next`]).
@@ -287,7 +281,7 @@ mod tests {
       assert!(out.log().contains("immediate"));
    }
 
-   // -- clear / finish --
+   // -- clear --
 
    #[test]
    fn clear_erases_bar() {
@@ -317,21 +311,6 @@ mod tests {
       progress.clear(&mut out);
 
       // Then — subsequent redraws don't pad against a stale length
-      assert_eq!(progress.last_len, 0);
-   }
-
-   #[test]
-   fn finish_clears_bar_and_zeroes_state() {
-      // Given
-      let mut out = StringOutput::new();
-      let mut progress = Progress::new("", 5);
-      progress.next(&mut out);
-
-      // When
-      progress.finish(&mut out);
-
-      // Then
-      assert!(out.log().ends_with('\r'));
       assert_eq!(progress.last_len, 0);
    }
 
