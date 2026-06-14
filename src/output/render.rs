@@ -166,6 +166,52 @@ pub(crate) fn format_elapsed(ms: u128) -> String {
    if ms < 1000 { format!("{ms}ms") } else { format!("{}s", ms / 1000) }
 }
 
+/// Render a step-result header: `<glyph> <label> (<elapsed>)`.
+///
+/// `success` picks the glyph (and green/red when `colors`); the elapsed count is
+/// formatted by [`format_elapsed`]. `ConsoleOutput` appends each failed line via
+/// [`render_step_viewport_line`]; `StringOutput` emits this header alone.
+#[must_use]
+pub fn render_step_result(label: &str, success: bool, elapsed_ms: u128, colors: bool, theme: &RenderTheme) -> String {
+   let t = format_elapsed(elapsed_ms);
+   let glyph = if success { theme.success_glyph } else { theme.error_glyph };
+   if colors {
+      let color = if success { GREEN } else { RED };
+      format!("{color}{glyph}{RESET} {label} {DIM}({t}){RESET}")
+   } else {
+      format!("{glyph} {label} ({t})")
+   }
+}
+
+/// Render one line of a failed step's output viewport: 2-space indent, red when
+/// `colors`. Only ever called on the failure path, so the color is the error red.
+#[must_use]
+pub(crate) fn render_step_viewport_line(line: &str, colors: bool) -> String {
+   if colors { format!("  {RED}{line}{RESET}") } else { format!("  {line}") }
+}
+
+/// The file-system action a `[dry-run]` notice describes.
+#[derive(Copy, Clone)]
+pub(crate) enum DryRunAction {
+   /// A shell command that would have been executed.
+   Run,
+   /// A file that would have been written.
+   Write,
+   /// A file that would have been deleted.
+   Delete
+}
+
+/// Render a dry-run notice: `[dry-run] would <action>: <subject>`.
+#[must_use]
+pub(crate) fn render_dry_run(action: DryRunAction, subject: &str) -> String {
+   let verb = match action {
+      DryRunAction::Run => "run",
+      DryRunAction::Write => "write",
+      DryRunAction::Delete => "delete"
+   };
+   format!("[dry-run] would {verb}: {subject}")
+}
+
 /// Render a state line: `<state_glyph> <msg>`.
 #[must_use]
 pub fn render_state(msg: &str, colors: bool, theme: &RenderTheme) -> String {
@@ -334,6 +380,39 @@ mod tests {
    #[test]
    fn render_error_no_colors() {
       assert_eq!(render_error("not found", false, &DEFAULT_THEME), "✗ error: not found");
+   }
+
+   #[test]
+   fn render_step_result_no_colors() {
+      assert_eq!(render_step_result("build", true, 1200, false, &DEFAULT_THEME), "✓ build (1s)");
+      assert_eq!(render_step_result("test", false, 300, false, &DEFAULT_THEME), "✗ test (300ms)");
+   }
+
+   #[test]
+   fn render_step_result_with_colors() {
+      // Success: green glyph, dim elapsed.
+      assert_eq!(
+         render_step_result("build", true, 1200, true, &DEFAULT_THEME),
+         "\x1b[32m\u{2713}\x1b[0m build \x1b[2m(1s)\x1b[0m"
+      );
+      // Failure: red glyph, dim elapsed.
+      assert_eq!(
+         render_step_result("test", false, 300, true, &DEFAULT_THEME),
+         "\x1b[31m\u{2717}\x1b[0m test \x1b[2m(300ms)\x1b[0m"
+      );
+   }
+
+   #[test]
+   fn render_step_viewport_line_colors_and_plain() {
+      assert_eq!(render_step_viewport_line("error: boom", false), "  error: boom");
+      assert_eq!(render_step_viewport_line("error: boom", true), "  \x1b[31merror: boom\x1b[0m");
+   }
+
+   #[test]
+   fn render_dry_run_all_actions() {
+      assert_eq!(render_dry_run(DryRunAction::Run, "rm -rf /"), "[dry-run] would run: rm -rf /");
+      assert_eq!(render_dry_run(DryRunAction::Write, "/some/path.json"), "[dry-run] would write: /some/path.json");
+      assert_eq!(render_dry_run(DryRunAction::Delete, "/tmp/x"), "[dry-run] would delete: /tmp/x");
    }
 
    #[test]

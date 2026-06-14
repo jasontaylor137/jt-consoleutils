@@ -2,7 +2,10 @@
 
 use std::fmt::Write as _;
 
-use super::{DEFAULT_THEME, Output, RenderTheme, format_elapsed};
+use super::{
+   DEFAULT_THEME, Output, RenderTheme,
+   render::{DryRunAction, render_dry_run, render_step_result}
+};
 #[cfg(any(feature = "verbose", feature = "trace"))]
 use super::{Dim, with_prefix};
 
@@ -134,20 +137,20 @@ impl Output for StringOutput {
    }
 
    fn step_result(&mut self, label: &str, success: bool, elapsed_ms: u128, _viewport: &[String]) {
-      let symbol = if success { self.theme.success_glyph } else { self.theme.error_glyph };
-      let _ = writeln!(self.buf, "{symbol} {label} ({})", format_elapsed(elapsed_ms));
+      let line = render_step_result(label, success, elapsed_ms, self.colors_enabled, &self.theme);
+      let _ = writeln!(self.buf, "{line}");
    }
 
    fn dry_run_shell(&mut self, cmd: &str) {
-      let _ = writeln!(self.buf, "[dry-run] would run: {cmd}");
+      let _ = writeln!(self.buf, "{}", render_dry_run(DryRunAction::Run, cmd));
    }
 
    fn dry_run_write(&mut self, path: &str) {
-      let _ = writeln!(self.buf, "[dry-run] would write: {path}");
+      let _ = writeln!(self.buf, "{}", render_dry_run(DryRunAction::Write, path));
    }
 
    fn dry_run_delete(&mut self, path: &str) {
-      let _ = writeln!(self.buf, "[dry-run] would delete: {path}");
+      let _ = writeln!(self.buf, "{}", render_dry_run(DryRunAction::Delete, path));
    }
 }
 

@@ -26,7 +26,6 @@ pub mod trace;
 
 pub use console::ConsoleOutput;
 pub use mode::{LogLevel, OutputMode};
-pub(crate) use render::format_elapsed;
 pub use render::{ASCII_THEME, DEFAULT_THEME, RenderTheme};
 pub use string::StringOutput;
 

@@ -1,6 +1,9 @@
 //! [`ConsoleOutput`] — production [`Output`] writing to stdout/stderr.
 
-use super::{DEFAULT_THEME, Output, OutputMode, RenderTheme, format_elapsed};
+use super::{
+   DEFAULT_THEME, Output, OutputMode, RenderTheme,
+   render::{DryRunAction, render_dry_run, render_step_result, render_step_viewport_line}
+};
 #[cfg(any(feature = "verbose", feature = "trace"))]
 use super::{Dim, with_prefix};
 
@@ -152,39 +155,29 @@ impl Output for ConsoleOutput {
       if self.mode.is_quiet() {
          return;
       }
-      let t = format_elapsed(elapsed_ms);
-      let glyph = if success { self.theme.success_glyph } else { self.theme.error_glyph };
-      let (header, viewport_line): (String, fn(&str) -> String) = match (success, self.colors_enabled) {
-         (true, true) => (format!("\x1b[32m{glyph}\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  {l}")),
-         (true, false) => (format!("{glyph} {label} ({t})"), |l| format!("  {l}")),
-         (false, true) => {
-            (format!("\x1b[31m{glyph}\x1b[0m {label} \x1b[2m({t})\x1b[0m"), |l| format!("  \x1b[31m{l}\x1b[0m"))
-         }
-         (false, false) => (format!("{glyph} {label} ({t})"), |l| format!("  {l}"))
-      };
-      println!("{header}");
+      println!("{}", render_step_result(label, success, elapsed_ms, self.colors_enabled, &self.theme));
       if !success {
          for line in viewport {
-            println!("{}", viewport_line(line));
+            println!("{}", render_step_viewport_line(line, self.colors_enabled));
          }
       }
    }
 
    fn dry_run_shell(&mut self, cmd: &str) {
       if self.mode.is_dry_run() {
-         println!("[dry-run] would run: {cmd}");
+         println!("{}", render_dry_run(DryRunAction::Run, cmd));
       }
    }
 
    fn dry_run_write(&mut self, path: &str) {
       if self.mode.is_dry_run() {
-         println!("[dry-run] would write: {path}");
+         println!("{}", render_dry_run(DryRunAction::Write, path));
       }
    }
 
    fn dry_run_delete(&mut self, path: &str) {
       if self.mode.is_dry_run() {
-         println!("[dry-run] would delete: {path}");
+         println!("{}", render_dry_run(DryRunAction::Delete, path));
       }
    }
 }
