@@ -26,21 +26,15 @@
 //! Caveat: SIGKILL / power loss are uncatchable. Stale state left behind in
 //! those cases must be cleaned up by the caller's own next-run logic.
 //!
-//! # Compatibility re-exports
-//!
-//! Both APIs are also re-exported at the [`crate::signals`] root so existing
-//! consumers don't break. New code should prefer the submodule paths
+//! Import the API you want directly from its submodule
 //! ([`crate::signals::parent::install_parent_handlers`],
-//! [`crate::signals::interrupt::install_interrupt_handler`]) to make the API
-//! choice explicit at the import site.
+//! [`crate::signals::interrupt::install_interrupt_handler`]) so the API choice
+//! is explicit at the import site.
 
 pub mod interrupt;
 pub mod parent;
 
 use std::sync::atomic::{AtomicU8, Ordering};
-
-pub use interrupt::{install_interrupt_handler, is_interrupted, reset_interrupt};
-pub use parent::{SigintDefaultGuard, install_parent_handlers};
 
 /// Returned when a second SIGINT handler install is attempted. The two install
 /// functions in this module are mutually exclusive — both target the same
@@ -135,9 +129,12 @@ mod tests {
    use std::sync::Mutex;
 
    use super::*;
-   use crate::signals::interrupt::INTERRUPTED;
    #[cfg(unix)]
    use crate::signals::parent::set_sigint_ignored;
+   use crate::signals::{
+      interrupt::{INTERRUPTED, install_interrupt_handler, is_interrupted, reset_interrupt},
+      parent::install_parent_handlers
+   };
 
    /// Tests that mutate INSTALL_STATE or the actual SIGINT slot must serialize
    /// — cargo test runs them in parallel and the slot is process-global.

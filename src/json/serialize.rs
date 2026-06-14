@@ -1,9 +1,9 @@
 //! Pretty-printed JSON serialization for [`JsonValue`].
 //!
 //! Output is strict JSON (RFC 8259) — never JSONC. Objects are emitted with
-//! keys in sorted order (a consequence of the `BTreeMap` backing store), one
-//! key/value per line, indented with 2 spaces per nesting level. Empty objects
-//! and arrays render as `{}` / `[]` on a single line.
+//! keys in insertion order (the order they were added to the backing
+//! `JsonMap`), one key/value per line, indented with 2 spaces per nesting
+//! level. Empty objects and arrays render as `{}` / `[]` on a single line.
 //!
 //! Strings are escaped via the standard JSON set (`\"`, `\\`, `\n`, `\r`,
 //! `\t`, `\b`, `\f`, and `\u00XX` for other control characters). Non-ASCII
