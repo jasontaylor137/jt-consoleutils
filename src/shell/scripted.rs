@@ -17,7 +17,6 @@
 //! height).
 //!
 //! [`MockShell`]: super::MockShell
-#![allow(dead_code)]
 
 use std::{cell::RefCell, collections::VecDeque, thread, time::Duration};
 

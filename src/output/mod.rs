@@ -140,28 +140,25 @@ pub trait Output {
    }
 }
 
+/// Prefix every line of `msg` with `prefix`, one rendered line per source line.
 #[cfg(any(feature = "verbose", feature = "trace"))]
-#[derive(Copy, Clone)]
-enum Dim {
-   #[cfg(feature = "trace")]
-   Yes,
-   No
-}
-
-#[cfg(any(feature = "verbose", feature = "trace"))]
-fn with_prefix(prefix: &str, msg: &str, dim: Dim) -> String {
+fn with_prefix(prefix: &str, msg: &str) -> String {
    use std::fmt::Write as _;
    let mut out = String::new();
    for l in msg.lines() {
-      match dim {
-         #[cfg(feature = "trace")]
-         Dim::Yes => {
-            let _ = writeln!(out, "\x1b[2m{prefix}{l}\x1b[0m");
-         }
-         Dim::No => {
-            let _ = writeln!(out, "{prefix}{l}");
-         }
-      }
+      let _ = writeln!(out, "{prefix}{l}");
+   }
+   out
+}
+
+/// Like [`with_prefix`], but wraps each rendered line in dim ANSI
+/// (`\x1b[2m…\x1b[0m`). Used for trace output.
+#[cfg(feature = "trace")]
+fn with_dim_prefix(prefix: &str, msg: &str) -> String {
+   use std::fmt::Write as _;
+   let mut out = String::new();
+   for l in msg.lines() {
+      let _ = writeln!(out, "\x1b[2m{prefix}{l}\x1b[0m");
    }
    out
 }
