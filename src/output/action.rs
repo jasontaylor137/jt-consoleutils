@@ -20,15 +20,6 @@ pub enum Trailing {
    PrepTo(String),
    /// Themed prepositional phrase using [`RenderTheme::prep_from`].
    PrepFrom(String),
-   /// Caller-supplied connector word + target. Bypasses the theme — use
-   /// only when the connector cannot be expressed via [`PrepTo`](Self::PrepTo)
-   /// / [`PrepFrom`](Self::PrepFrom).
-   PrepCustom {
-      /// Connector word, e.g. `"into"` or `"as"`.
-      word: &'static str,
-      /// Target text rendered in dim.
-      target: String
-   },
    /// Bare object — already in `subject`; render nothing.
    None
 }

@@ -133,7 +133,6 @@ pub fn render_action(
       }
       Trailing::PrepTo(target) => write_prep(&mut s, theme.prep_to, target, colors),
       Trailing::PrepFrom(target) => write_prep(&mut s, theme.prep_from, target, colors),
-      Trailing::PrepCustom { word, target } => write_prep(&mut s, word, target, colors),
       Trailing::None => {}
    }
    if let Some(n) = note {
@@ -522,23 +521,5 @@ mod tests {
       assert_eq!(prep_from, "✓ Retiré lodash depuis deploy.ts");
       assert_eq!(render_warn("clé inconnue", false, &FRENCH), "⚠ attention : clé inconnue");
       assert_eq!(render_error("introuvable", false, &FRENCH), "✗ erreur : introuvable");
-   }
-
-   #[test]
-   fn prep_custom_uses_caller_supplied_word() {
-      // Given / When
-      let s = render_action(
-         "Compiled",
-         Some("main.rs"),
-         None,
-         &Trailing::PrepCustom { word: "into", target: "main.o".to_string() },
-         &None,
-         &None,
-         false,
-         &DEFAULT_THEME
-      );
-
-      // Then
-      assert_eq!(s, "✓ Compiled main.rs into main.o");
    }
 }

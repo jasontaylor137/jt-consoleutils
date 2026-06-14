@@ -373,18 +373,6 @@ impl StructSerializer {
       value.write_pretty(&mut self.out, self.indent + 1);
    }
 
-   // -- arrays --------------------------------------------------------------
-
-   /// Write an array of strings. Empty arrays emit `"[]"`.
-   pub fn field_array_str(&mut self, key: &str, values: &[String]) {
-      self.field(key, values);
-   }
-
-   /// Write an array of any [`ToJson`] values. Empty arrays emit `"[]"`.
-   pub fn field_array<T: ToJson>(&mut self, key: &str, values: &[T]) {
-      self.field(key, values);
-   }
-
    // -- finish --------------------------------------------------------------
 
    /// Finish the object and return the JSON string. Empty objects produce
@@ -518,14 +506,14 @@ mod tests {
    #[test]
    fn empty_string_array_renders_as_brackets() {
       let mut s = StructSerializer::new();
-      s.field_array_str("tags", &[]);
+      s.field("tags", &[] as &[String]);
       assert_eq!(s.finish(), "{\n  \"tags\": []\n}");
    }
 
    #[test]
    fn populated_string_array() {
       let mut s = StructSerializer::new();
-      s.field_array_str("tags", &["a".to_string(), "b".to_string()]);
+      s.field("tags", ["a".to_string(), "b".to_string()].as_slice());
       assert_eq!(s.finish(), "{\n  \"tags\": [\n    \"a\",\n    \"b\"\n  ]\n}");
    }
 
@@ -533,7 +521,7 @@ mod tests {
    fn string_array_inside_nested_object() {
       let mut s = StructSerializer::new();
       s.field_object("inner", |child| {
-         child.field_array_str("tags", &["x".to_string()]);
+         child.field("tags", ["x".to_string()].as_slice());
       });
       assert_eq!(s.finish(), "{\n  \"inner\": {\n    \"tags\": [\n      \"x\"\n    ]\n  }\n}");
    }
@@ -546,10 +534,10 @@ mod tests {
       // so this test isolates indentation.
       let mut s = StructSerializer::new();
       s.field_str("a", "x");
-      s.field_array_str("b", &["one".to_string(), "two".to_string()]);
+      s.field("b", ["one".to_string(), "two".to_string()].as_slice());
       s.field_object("c", |c| {
          c.field_str("d", "v");
-         c.field_array_str("e", &["x".to_string()]);
+         c.field("e", ["x".to_string()].as_slice());
          c.field_object("f", |f| {
             f.field_i64("g", 1);
          });
@@ -692,7 +680,7 @@ mod tests {
    }
 
    #[test]
-   fn struct_serializer_field_array_with_user_type() {
+   fn struct_serializer_field_slice_of_user_type() {
       struct Item(i64);
       impl ToJson for Item {
          fn write_pretty(&self, out: &mut String, indent: usize) {
@@ -702,7 +690,7 @@ mod tests {
          }
       }
       let mut s = StructSerializer::new();
-      s.field_array("items", &[Item(1), Item(2)]);
+      s.field("items", [Item(1), Item(2)].as_slice());
       assert_eq!(s.finish(), "{\n  \"items\": [\n    {\n      \"n\": 1\n    },\n    {\n      \"n\": 2\n    }\n  ]\n}");
    }
 }

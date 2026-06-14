@@ -18,22 +18,7 @@ use std::path::Path;
 /// formatting machinery from `core::fmt::float`.
 #[must_use]
 pub fn format_bytes(bytes: u64) -> String {
-   const KIB: u64 = 1024;
-   const MIB: u64 = 1024 * KIB;
-   const GIB: u64 = 1024 * MIB;
-
-   if bytes >= GIB {
-      let tenths = (bytes * 10 + GIB / 2) / GIB;
-      format!("{}.{} GiB", tenths / 10, tenths % 10)
-   } else if bytes >= MIB {
-      let tenths = (bytes * 10 + MIB / 2) / MIB;
-      format!("{}.{} MiB", tenths / 10, tenths % 10)
-   } else if bytes >= KIB {
-      let tenths = (bytes * 10 + KIB / 2) / KIB;
-      format!("{}.{} KiB", tenths / 10, tenths % 10)
-   } else {
-      format!("{bytes} B")
-   }
+   format_scaled(bytes, 1024, ["KiB", "MiB", "GiB"])
 }
 
 /// Format a byte count as a human-readable string with one decimal place,
@@ -44,19 +29,30 @@ pub fn format_bytes(bytes: u64) -> String {
 /// and `ls -h --si`. For binary/IEC units, see [`format_bytes`].
 #[must_use]
 pub fn format_bytes_si(bytes: u64) -> String {
-   const KB: u64 = 1000;
-   const MB: u64 = 1000 * KB;
-   const GB: u64 = 1000 * MB;
+   format_scaled(bytes, 1000, ["KB", "MB", "GB"])
+}
 
-   if bytes >= GB {
-      let tenths = (bytes * 10 + GB / 2) / GB;
-      format!("{}.{} GB", tenths / 10, tenths % 10)
-   } else if bytes >= MB {
-      let tenths = (bytes * 10 + MB / 2) / MB;
-      format!("{}.{} MB", tenths / 10, tenths % 10)
-   } else if bytes >= KB {
-      let tenths = (bytes * 10 + KB / 2) / KB;
-      format!("{}.{} KB", tenths / 10, tenths % 10)
+/// Shared body for [`format_bytes`] / [`format_bytes_si`]: scale `bytes` by
+/// `unit` (1024 for binary/IEC, 1000 for decimal/SI), round to one decimal
+/// place, and label with `suffixes` (`[kilo, mega, giga]`). Values below `unit`
+/// render as a plain integer `"{bytes} B"`.
+///
+/// Integer arithmetic only — avoids the ~5 KB f64 `Display` machinery.
+fn format_scaled(bytes: u64, unit: u64, suffixes: [&str; 3]) -> String {
+   let kilo = unit;
+   let mega = unit * kilo;
+   let giga = unit * mega;
+   let [ks, ms, gs] = suffixes;
+
+   if bytes >= giga {
+      let tenths = (bytes * 10 + giga / 2) / giga;
+      format!("{}.{} {gs}", tenths / 10, tenths % 10)
+   } else if bytes >= mega {
+      let tenths = (bytes * 10 + mega / 2) / mega;
+      format!("{}.{} {ms}", tenths / 10, tenths % 10)
+   } else if bytes >= kilo {
+      let tenths = (bytes * 10 + kilo / 2) / kilo;
+      format!("{}.{} {ks}", tenths / 10, tenths % 10)
    } else {
       format!("{bytes} B")
    }
