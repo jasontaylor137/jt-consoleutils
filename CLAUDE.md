@@ -40,9 +40,13 @@ Every `pub` item is part of the public API:
 
 ## Releasing
 
-`scripts/release.sh <version>` runs all checks, bumps the version, drafts a
-changelog from commit messages, opens `$EDITOR` for polish, then commits,
-tags, pushes, and publishes to crates.io.
+Releasing is a two-step flow:
+
+1. `scripts/prepare-release.sh <version>` runs all checks, bumps the version,
+   drafts a changelog from commit messages, opens `$EDITOR` for polish, then
+   makes a local `release vX.Y.Z` commit (no tag, no push, no publish).
+2. `scripts/publish-release.sh [version]` tags HEAD, pushes the commit and tag,
+   and publishes to crates.io.
 
 ## Code Style
 
