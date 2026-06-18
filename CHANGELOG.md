@@ -15,6 +15,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.7.0] — 2026-06-17
+
+A consolidation release that trims unused public surface and tightens the
+output traits. Several `pub` items were removed or moved; see the breaking
+notes below.
+
+### Added
+
+- `shell::format_command` is now public, for rendering a command line the same
+  way the shell runner displays it.
+
+### Changed
+
+- **Breaking:** the `Output` trait was narrowed to terminal/quiet/verbose
+  capability queries. The action-emitting methods — `state`, `hint`, `section`,
+  `item`, `warn`, and `error` — now live on the `OutputAction` trait. Callers
+  that invoked these on an `Output` value must bring `OutputAction` into scope.
+  Quiet-mode suppression is now applied at a single seam rather than per method.
+- **Breaking:** `signals` no longer re-exports its items at the module root.
+  Use the now-public submodules instead: `signals::interrupt::{install_interrupt_handler,
+  is_interrupted, reset_interrupt}` and `signals::parent::{install_parent_handlers,
+  SigintDefaultGuard}`.
+- **Breaking:** `fs_utils::make_executable` now returns `Result<(), FsError>`
+  with path context on failure, matching `restrict_permissions`.
+- **Breaking:** `cli::extract_global_flags` now returns
+  `Result<(OutputMode, Vec<_>), CliError>` — it validates conflicting flags and
+  builds the `OutputMode` for you instead of returning raw flags.
+- **Breaking:** the cfg-gated `Dim` enum was replaced with named dim-prefix
+  functions.
+- The `JsonMap` object backing is now an insertion-ordered `Vec` instead of a
+  `BTreeMap`, so object keys serialize in insertion order. Also trims ~7.7 KB
+  off the built crate.
+- Internal: size scanning swaps `std::sync::mpsc` for a minimal line queue, and
+  the JSON / JSONC file-read paths share one parse core.
+
+### Removed
+
+- **Breaking:** the unused public `Spinner` type from `terminal`.
+- **Breaking:** `shell::run_passthrough` (superseded by the standard run path;
+  use `format_command` for display).
+- **Breaking:** `Progress::finish` — it was an exact alias of `Progress::clear`;
+  call `clear` instead.
+- **Breaking:** `StructSerializer::field_array` and `field_array_str`.
+- **Breaking:** the `Trailing::PrepCustom` variant.
+
+### Fixed
+
+- Build warning when the `trace` feature is disabled.
+- Broken intra-doc links left by the `Output` trait narrowing, so
+  `cargo doc --all-features` is warning-free again.
+
 ## [0.6.0] — 2026-06-06
 
 ### Added
@@ -229,6 +280,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.7.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.1...v0.5.2
