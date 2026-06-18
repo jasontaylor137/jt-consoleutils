@@ -168,8 +168,8 @@ pub(crate) fn format_elapsed(ms: u128) -> String {
 /// Render a step-result header: `<glyph> <label> (<elapsed>)`.
 ///
 /// `success` picks the glyph (and green/red when `colors`); the elapsed count is
-/// formatted by [`format_elapsed`]. `ConsoleOutput` appends each failed line via
-/// [`render_step_viewport_line`]; `StringOutput` emits this header alone.
+/// formatted by `format_elapsed`. `ConsoleOutput` appends each failed line via
+/// `render_step_viewport_line`; `StringOutput` emits this header alone.
 #[must_use]
 pub fn render_step_result(label: &str, success: bool, elapsed_ms: u128, colors: bool, theme: &RenderTheme) -> String {
    let t = format_elapsed(elapsed_ms);

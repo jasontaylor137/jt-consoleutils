@@ -72,7 +72,7 @@ pub trait Output {
    }
 
    /// Returns `true` when this output is in quiet mode and should suppress
-   /// non-essential lines. Default: `false`. Gates [`warn`](Output::warn);
+   /// non-essential lines. Default: `false`. Gates [`warn`](action::OutputAction::warn);
    /// errors flow regardless of this flag.
    fn is_quiet(&self) -> bool {
       false
