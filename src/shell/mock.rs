@@ -31,7 +31,12 @@ pub struct MockShell {
    pub command_output_ok: bool,
    /// Queue of results for `exec_capture` calls; pops front on each call.
    /// If empty, falls back to `CommandResult { success: run_success, stderr: "" }`.
-   pub exec_capture_results: RefCell<VecDeque<CommandResult>>
+   pub exec_capture_results: RefCell<VecDeque<CommandResult>>,
+   /// Queue of results for `run_command` calls; pops front on each call. Lets a
+   /// test script a sequence of run_command outcomes — including captured
+   /// stderr, which the `run_success` flag alone cannot express. If empty,
+   /// falls back to `CommandResult { success: run_success, stderr: "" }`.
+   pub run_command_results: RefCell<VecDeque<CommandResult>>
 }
 
 impl Default for MockShell {
@@ -51,7 +56,8 @@ impl MockShell {
          missing_commands: RefCell::new(Vec::new()),
          command_output_value: String::new(),
          command_output_ok: true,
-         exec_capture_results: RefCell::new(VecDeque::new())
+         exec_capture_results: RefCell::new(VecDeque::new()),
+         run_command_results: RefCell::new(VecDeque::new())
       }
    }
 
@@ -74,6 +80,15 @@ impl MockShell {
    pub fn push_capture(&self, result: CommandResult) {
       self.exec_capture_results.borrow_mut().push_back(result);
    }
+
+   /// Push a `CommandResult` onto the back of the `run_command` queue.
+   ///
+   /// Each call to `run_command` pops one result from the front. Use this to
+   /// script a sequence of run_command outcomes whose stderr matters (the
+   /// `run_success` flag alone cannot carry stderr).
+   pub fn push_run(&self, result: CommandResult) {
+      self.run_command_results.borrow_mut().push_back(result);
+   }
 }
 
 impl Shell for MockShell {
@@ -86,7 +101,9 @@ impl Shell for MockShell {
       _mode: OutputMode
    ) -> Result<CommandResult, ShellError> {
       self.calls.borrow_mut().push(format_command(program, args));
-      Ok(CommandResult::fake(self.run_success))
+      let result =
+         self.run_command_results.borrow_mut().pop_front().unwrap_or_else(|| CommandResult::fake(self.run_success));
+      Ok(result)
    }
 
    fn shell_exec(
@@ -320,6 +337,43 @@ mod tests {
       assert!(r1.success);
       assert!(!r2.success);
       assert_eq!(r2.stderr, "second");
+   }
+
+   // -----------------------------------------------------------------------
+   // run_command_results queue
+   // -----------------------------------------------------------------------
+
+   #[test]
+   fn run_command_pops_from_queue() {
+      let shell = MockShell::new();
+      shell.push_run(CommandResult { success: false, code: None, stderr: "no asset found".to_string() });
+      let mut out = StringOutput::new();
+      let result = shell.run_command("x", "mise", &["install", "pnpm@1"], &mut out, default_mode()).unwrap();
+      assert!(!result.success);
+      assert_eq!(result.stderr, "no asset found");
+   }
+
+   #[test]
+   fn run_command_queue_consumed_in_order() {
+      let shell = MockShell::new();
+      shell.push_run(CommandResult { success: false, code: None, stderr: "first".to_string() });
+      shell.push_run(CommandResult::fake(true));
+      let mut out = StringOutput::new();
+      let r1 = shell.run_command("a", "mise", &[], &mut out, default_mode()).unwrap();
+      let r2 = shell.run_command("b", "mise", &[], &mut out, default_mode()).unwrap();
+      assert!(!r1.success);
+      assert_eq!(r1.stderr, "first");
+      assert!(r2.success);
+   }
+
+   #[test]
+   fn run_command_falls_back_to_run_success_when_queue_empty() {
+      let mut shell = MockShell::new();
+      shell.run_success = false;
+      let mut out = StringOutput::new();
+      let result = shell.run_command("x", "false", &[], &mut out, default_mode()).unwrap();
+      assert!(!result.success);
+      assert_eq!(result.stderr, "");
    }
 
    // -----------------------------------------------------------------------
