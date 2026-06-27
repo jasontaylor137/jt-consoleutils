@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.7.1] — 2026-06-27
+
+### Added
+
+- `MockShell` gained a `run_command_results` queue and a `push_run` method, so
+  tests can script a sequence of `run_command` outcomes — including captured
+  stderr, which the `run_success` flag alone cannot express.
+
 ## [0.7.0] — 2026-06-17
 
 A consolidation release that trims unused public surface and tightens the
@@ -280,6 +288,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.7.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.2...v0.5.3
