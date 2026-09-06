@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `terminal::enable_ansi()` prepares the Windows console for the ANSI escapes
+  and non-ASCII text this crate emits: it enables virtual-terminal processing
+  on stdout and sets the console output codepage to UTF-8 (65001). A no-op on
+  every other platform, so callers invoke it unconditionally at startup.
+  Previously every consumer had to hand-roll the `GetConsoleMode` /
+  `SetConsoleMode` / `SetConsoleOutputCP` dance — and take a `windows-sys`
+  `Win32_System_Console` dependency to do it.
+
 ### Changed
 
 ### Fixed

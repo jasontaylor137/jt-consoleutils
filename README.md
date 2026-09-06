@@ -49,7 +49,7 @@ For full API reference, see [docs.rs](https://docs.rs/jt-consoleutils).
 | [`cli`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/cli/) | `CommandParser` trait with global flag handling, subcommand dispatch, rainbow-colorized help text, and `--version` printing |
 | [`fs_utils`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/fs_utils/) | `FsError` with path context; `read_json_file` / `write_json_file_pretty` / `write_if_changed`; dry-run-aware `dry_write` / `dry_remove_file` |
 | [`paths`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/paths/) | Home dir, `.`/`..` normalization, PATH membership, canonicalization with UNC stripping |
-| [`terminal`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/terminal/) | ANSI color constants, rainbow colorizer, terminal width detection |
+| [`terminal`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/terminal/) | ANSI color constants, rainbow colorizer, terminal width detection, Windows console preparation |
 | [`str_utils`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/str_utils/) | `format_bytes`, `plural`, `path_to_string` |
 | [`envvars`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/envvars/) | `${VAR}` expansion from the host environment |
 | [`signals`](https://docs.rs/jt-consoleutils/latest/jt_consoleutils/signals/) | SIGINT / Ctrl+C handling for graceful shutdown and cooperative cancellation |
