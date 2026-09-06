@@ -17,6 +17,9 @@ use crate::{
 };
 
 pub mod dry;
+mod temp;
+
+pub use temp::{PermsCopy, TempFile, atomic_write, atomic_write_keep_perms};
 
 // ---------------------------------------------------------------------------
 // FsError
@@ -149,6 +152,10 @@ pub fn restrict_permissions(_path: &Path) -> Result<(), FsError> {
 /// Write `contents` to `path` only if the file doesn't exist or its content differs.
 /// Returns `Ok(true)` if the file was written, `Ok(false)` if skipped.
 ///
+/// The write is atomic and permission-preserving — see
+/// [`atomic_write_keep_perms`] — so a reader never observes a half-written
+/// file and a rewrite never widens the mode.
+///
 /// # Errors
 ///
 /// Returns [`FsError::Read`] if the existing file cannot be read,
@@ -160,7 +167,7 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, FsError> {
          return Ok(false);
       }
    }
-   std::fs::write(path, contents).map_err(|e| FsError::write(path, e))?;
+   atomic_write_keep_perms(path, contents).map_err(|e| FsError::write(path, e))?;
    Ok(true)
 }
 

@@ -19,7 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SetConsoleMode` / `SetConsoleOutputCP` dance — and take a `windows-sys`
   `Win32_System_Console` dependency to do it.
 
+- `fs_utils::TempFile`, a uniquely-named file that is deleted when dropped:
+  created exclusively (never opening or truncating an existing name) and `0600`
+  on Unix, with `persist` to rename it over a destination. Implemented on `std`
+  alone — no new runtime dependency for downstream consumers.
+
+- `fs_utils::atomic_write` and `fs_utils::atomic_write_keep_perms` stage a
+  sibling `.<name>.tmp.<unique>` file and rename it over the destination, so a
+  reader never sees a half-written file. The `keep_perms` form carries the
+  original's mode over to the replacement and returns a `PermsCopy` saying
+  whether that succeeded — a rewrite of a credentials file must never widen its
+  mode. A symlinked destination is written *through* rather than replaced, and
+  a rename that Windows refuses because a scanner or indexer still holds the
+  destination open is retried over ~170 ms before giving up.
+
 ### Changed
+
+- **Behavioral:** `fs_utils::write_if_changed` (and `dry::dry_write_if_changed`
+  through it) now writes atomically via `atomic_write_keep_perms` rather than
+  `std::fs::write`. Three consequences: writes need permission on the
+  containing directory; a destination that is a symlink is followed rather than
+  replaced; and a read-only destination is overwritten rather than refused,
+  since a rename answers to the directory's permissions rather than the file's.
 
 ### Fixed
 
