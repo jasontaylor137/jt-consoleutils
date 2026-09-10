@@ -128,6 +128,20 @@ The minimum supported Rust version is **1.85** (Rust 2024 edition).
 
 ---
 
+## Changelog
+
+Every release is recorded in
+[CHANGELOG.md](https://github.com/jasontaylor137/jt-consoleutils/blob/master/CHANGELOG.md),
+which follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+calls out breaking and behavioral changes explicitly. Releases are tagged
+`vX.Y.Z` in the repository.
+
+This crate is pre-1.0: under [SemVer](https://semver.org/), a **minor** bump
+(`0.7` → `0.8`) is where breaking changes land, and a patch bump is additive
+or a fix.
+
+---
+
 ## License
 
 Licensed under either of:
