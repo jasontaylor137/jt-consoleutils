@@ -285,7 +285,32 @@ echo "  Delete the 'Commits since ...' block when done."
 echo "  Leave the header as '## [Unreleased]' — it gets renamed to [${VERSION}] after save."
 echo ""
 
-${EDITOR} CHANGELOG.md
+while :; do
+  ${EDITOR} CHANGELOG.md
+
+  # Guard: the 'Commits since' block is scaffolding, not release notes. Six of
+  # the first twelve releases shipped with it left in — 0.2.0, 0.3.0, 0.4.0 and
+  # 0.5.1 had it as their *only* content — so the instruction above plainly is
+  # not enough on its own. Refuse to promote a section that still carries it.
+  if STRAY=$(grep -nE '^### Commits since' CHANGELOG.md); then
+    echo ""
+    echo "  The 'Commits since' block is still in CHANGELOG.md:"
+    echo "$STRAY" | sed 's/^/    /'
+    echo ""
+    echo "  Fold those items into Added/Changed/Fixed and delete the block."
+    echo "  It is the raw commit list, not release notes — promoting it now"
+    echo "  publishes commit subjects as the record of this release."
+    echo ""
+    read -rp "  Re-open the editor? [Y/n] " REEDIT
+    if [[ "${REEDIT}" == "n" || "${REEDIT}" == "N" ]]; then
+      echo "Aborting. Edits left in working tree."
+      exit 1
+    fi
+    continue
+  fi
+
+  break
+done
 
 echo ""
 read -rp "Changelog looks good? [y/N] " CONFIRM
