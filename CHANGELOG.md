@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.8.0] — 2026-09-09
+
+### Added
+
 - `terminal::enable_ansi()` prepares the Windows console for the ANSI escapes
   and non-ASCII text this crate emits: it enables virtual-terminal processing
   on stdout and sets the console output codepage to UTF-8 (65001). A no-op on
@@ -317,6 +325,7 @@ match parse_cli::<Cmd>() {
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.8.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.3...v0.6.0
