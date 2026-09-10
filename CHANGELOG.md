@@ -137,13 +137,7 @@ notes below.
 
 - `MockShell::mark_missing(program)` — marks a single program as absent so `command_exists(program)` returns `false` even when the global `command_exists_result` flag is `true`. Lets a test model a partial PATH (e.g. "ruby is on PATH but bundle is not") without flipping the all-or-nothing flag. Backed by a new public `missing_commands` field.
 
-### Commits since v0.5.2
-
-- MockShell::mark_missing
-
 ## [0.5.2] — 2026-05-25
-
-### Added
 
 ### Changed
 
@@ -154,24 +148,18 @@ notes below.
 - `<cmd> <sub> --help` now resolves nested command help (e.g. `app config show --help`), matching the `help config show` form. Previously the flag form discarded the path between the subcommand and the flag and fell back to the parent command's help.
 - The parent-process signal path now installs a real Ctrl+C/SIGINT handler instead of `SIG_IGN`. Because `SIG_IGN` is inherited across `exec`, spawned children (and their descendants) would otherwise have become immune to Ctrl+C; a handler is reset to the default in exec'd children, so they still terminate on Ctrl+C while the parent survives.
 
-### Commits since v0.5.1
-
-- update dependencies
-- fix(signals): install survive-Ctrl+C handler, not inherited SIG_IGN
-- fix(cli): resolve nested help for the '<cmd> <sub> --help' form
-- update version to 0.5.2
-
 ## [0.5.1] — 2026-05-11
 
-### Added
+No library changes — the public API and every file under `src/` are identical
+to 0.5.0. Released only to correct packaging metadata, so there is nothing to
+gain by upgrading from 0.5.0 for its own sake.
 
 ### Changed
 
-### Fixed
-
-### Commits since v0.5.0
-
-- docs: bump README install pin to 0.5
+- README install pin bumped to `0.5`, so the snippet crates.io renders on the
+  crate page no longer advertises the previous major-minor.
+- `scripts/prepare-release.sh` now verifies that pin as a preflight check,
+  since the stale-snippet mistake is easy to make and prominently displayed.
 
 ## [0.5.0] — 2026-05-11
 
@@ -229,79 +217,98 @@ match parse_cli::<Cmd>() {
 
 ## [0.4.0] — 2026-05-03
 
-### Added
+The largest release so far: a substantial body of functionality moved in from a
+downstream CLI, and the crate was reorganized from flat modules into cohesive
+directories.
 
 ### Changed
 
+- **Breaking:** four modules moved out of the crate root. `colorize` and
+  `colors` are now `terminal::colorize` and `terminal::colors`; `help` and
+  `version` are now `cli::help` and `cli::version`. `output`, `shell`,
+  `fs_utils` and `json` each became a directory with submodules — the names
+  re-exported from their roots are unchanged.
+- `terminal::colorize` renders its rainbow in a single allocation from a
+  palette of RGB triples, rather than allocating per span.
+- JSON numbers are retained as `String` rather than parsed to `f64`, dropping
+  the float round-trip and the precision loss that came with it.
+
+### Added
+
+- `dotenv` module, behind a new `dotenv` feature flag (pulls `dotenvy`).
+- `paths`, `envvars` and `signals` modules.
+- `fs_utils::dry` — `dry_write`, `dry_write_if_changed` and `dry_remove_file`
+  log the operation instead of performing it when the output mode says
+  dry-run, so a CLI's `--dry-run` flag does not need a branch at every call.
+- `signals` — `install_interrupt_handler`, `install_parent_handlers`,
+  `is_interrupted`, `reset_interrupt` and `SigintDefaultGuard`.
+- `output::progress` (`Progress`), `output::file_stats` (`FileStats`),
+  `output::render` and `output::trace`.
+- `vocab` — a typed output vocabulary. The `verb_enum!` and `noun_enum!`
+  macros generate an application's verbs and nouns, `AsVerb` / `AsNoun` render
+  them, and `ActionBuilder` plus the `OutputAction` trait compose them into
+  success lines. Consistent phrasing comes from the enum rather than from
+  hand-written prose at each call site.
+- `Output::summary(verb)`, for count summaries with no subject.
+- `CliError::ShowHelp`, so a parser can return help text as an outcome.
+- `cli::parse_cli_from`, for parsing an explicit argument vector.
+- `json::read_jsonc_file`, symmetric with `read_json_file`.
+- `MockShell::push_capture`.
+- `FsError` and `DotenvError` error types; `ShowBytes` and `Trailing` for byte
+  formatting.
+
 ### Fixed
 
-### Commits since v0.3.0
-
-- version bump
-- add parse_cli_from, also minor formatting fixes
-- perf: store JSON numbers as String to drop f64 parse path
-- refactor(output): typed-vocabulary abstraction with Verb/Noun enums and ActionBuilder
-- perf(colorize): single-alloc rainbow render — palette as RGB triples
-- rearranged modules for better cohesion
-- additional functionality from SR
-- finish (for now) move of functionality from SR to jt-consoleutils
-- various progress & file stat capabilities
-- add read_jsonc_file symmetric to read_json_file
-- broad audit pass: docs, color routing, API expansion, bug fixes
-- feat: add CliError::ShowHelp variant for help-text responses
-- Add Output::summary(verb) for subject-less action lines
-- add MockShell::push_capture
-- fix windows build, update rstest
-- cargo:rerun-if-changed
-
+- The Windows build.
+- Build support emits `cargo:rerun-if-changed`, so embedded build info no
+  longer goes stale when only the tracked inputs change.
 
 ## [0.3.0] — 2026-04-13
 
-### Added
+No public item was removed or renamed.
 
 ### Changed
 
-### Fixed
+- `format_bytes` computes with integer arithmetic instead of `f64`, avoiding
+  the ~5 KB of `core::fmt::float` Display machinery that a single `{:.1}`
+  format pulls into the binary. Rendered output is unchanged.
 
-### Commits since v0.2.0
+### Added
 
-- version bump
-- remove reliance on float formatting
-- CLI argument processing trait template
-- add JSONC support
-- u+x on scripts/release.sh
-- clippy fix
-- sed portability fix
-- minor release.sh fix - add cargo.lock to commit
-
+- `cli` module — a small framework for argument processing over `pico-args`:
+  the `CommandParser` trait, `ParsedCli<C>` and `CliError`, so a consumer
+  describes its commands and gets parsing, help and version handling.
+- `json` module — a dependency-free JSON parser and serializer: `JsonValue`,
+  `JsonError`, the `ToJson` and `FromJsonValue` traits, and `StructSerializer`.
+- JSONC support: comment-tolerant parsing, for hand-edited config files that
+  carry `//` and `/* */` comments.
 
 ## [0.2.0] — 2026-04-10
 
 ### Added
 
+- `LogLevel`, plus the `verbose!` and `trace!` macros behind new `verbose` and
+  `trace` feature flags. Both are fully conditionally compiled, so a consumer
+  that leaves the flags off pays nothing in binary size.
+- `CommandResult::require_success(cmd)` and `CommandResult::check(err)`, for
+  turning a non-zero exit into a typed error at the call site instead of
+  inspecting the exit code by hand.
+- `shell::command_parts(cmd)`, splitting a `Command` into program and
+  arguments for display.
+- `format_trace_block(label, content)`.
+- `wrap_help_text(text, width)` — word wrapping for help output.
+
 ### Changed
+
+- The shell propagates the child process's exit code rather than collapsing it
+  to a generic failure.
+- `command_exists` searches `PATH` directly instead of spawning `where` /
+  `which`, which removes a process launch from a check CLIs make repeatedly.
+- Many constructors and predicates became `const fn`.
 
 ### Fixed
 
-### Commits since v0.1.0
-
-- add CHANGELOG and GitHub Actions CI workflow
-- corrected changelog date
-- resolve clippy issues
-- additional clippy fix
-- propagate exit code from shell
-- add require_success and check on CommandResult
-- switched to LogLevel
-- verbose and trace macros
-- verbose and trace fully conditionally compiled
-- improve feature flagging of verbose and trace
-- command_parts() function to reduce duplication
-- support word wrapping in output
-- search path directly rather than running where/which for performance
-- added release script, refreshed claude.md
-- fix clippy and publish flags in release script
-- fix broken intra-doc link for LogLevel in output module docs
-
+- A broken intra-doc link for `LogLevel` in the `output` module docs.
 
 ## [0.1.0] — 2026-03-04
 
@@ -332,6 +339,7 @@ match parse_cli::<Cmd>() {
 [0.5.3]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.1.0...v0.2.0
