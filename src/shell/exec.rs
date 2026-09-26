@@ -68,22 +68,56 @@ pub fn run_command(
    mode: OutputMode,
    viewport_size: usize
 ) -> Result<CommandResult, ShellError> {
+   run_command_with_env(label, program, args, &[], output, mode, viewport_size)
+}
+
+/// [`run_command`], with `env` set on the child process on top of the
+/// inherited environment. The variables are never echoed — verbose mode prints
+/// only the program and args — so secrets (registry credentials) stay out of
+/// the terminal.
+///
+/// # Errors
+///
+/// Returns a [`ShellError`] if the process cannot be spawned, waited on, or
+/// exits with a non-zero status.
+pub fn run_command_with_env(
+   label: &str,
+   program: &str,
+   args: &[&str],
+   env: &[(String, String)],
+   output: &mut dyn Output,
+   mode: OutputMode,
+   viewport_size: usize
+) -> Result<CommandResult, ShellError> {
+   let spawn = Spawn { program, args, env };
    if mode.is_quiet() {
-      return run_quiet(program, args);
+      return run_quiet_spawn(&spawn);
    }
    #[cfg(feature = "verbose")]
    if mode.is_verbose() {
-      return run_verbose(label, program, args, output);
+      return run_verbose(label, &spawn, output);
    }
    if !io::stdout().is_terminal() {
-      return run_non_tty(label, program, args, output, viewport_size);
+      return run_non_tty(label, &spawn, output, viewport_size);
    }
-   run_overlay(label, program, args, output, viewport_size)
+   run_overlay(label, &spawn, output, viewport_size)
+}
+
+/// What to spawn: program, args, and extra environment variables.
+struct Spawn<'a> {
+   program: &'a str,
+   args: &'a [&'a str],
+   env: &'a [(String, String)]
 }
 
 /// Quiet mode: collect output silently, no terminal rendering.
 pub(super) fn run_quiet(program: &str, args: &[&str]) -> Result<CommandResult, ShellError> {
-   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
+   run_quiet_spawn(&Spawn { program, args, env: &[] })
+}
+
+fn run_quiet_spawn(spawn: &Spawn<'_>) -> Result<CommandResult, ShellError> {
+   let program = spawn.program;
+   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(spawn)?;
    let stderr_lines = collect_stderr_lines(lines, |_| {});
    let status = wait_and_join(program, child, readers)?;
 
@@ -108,16 +142,12 @@ pub(super) fn run_interactive(program: &str, args: &[&str]) -> Result<CommandRes
 
 /// Verbose mode: stream output with `| label...` header and `> ` prefixed lines.
 #[cfg(feature = "verbose")]
-fn run_verbose(
-   label: &str,
-   program: &str,
-   args: &[&str],
-   output: &mut dyn Output
-) -> Result<CommandResult, ShellError> {
+fn run_verbose(label: &str, spawn: &Spawn<'_>, output: &mut dyn Output) -> Result<CommandResult, ShellError> {
+   let program = spawn.program;
    output.emit_verbose(format!("{label}..."));
-   output.shell_command(&format_command(program, args));
+   output.shell_command(&format_command(program, spawn.args));
 
-   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
+   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(spawn)?;
    let stderr_lines = collect_stderr_lines(lines, |line| output.shell_line(line));
    let status = wait_and_join(program, child, readers)?;
 
@@ -153,12 +183,12 @@ fn apply_line(line: Line, viewport: &mut Vec<String>, stderr_lines: &mut Vec<Str
 /// fall back to end-of-run reporting that's safe to write into a log file.
 fn run_non_tty(
    label: &str,
-   program: &str,
-   args: &[&str],
+   spawn: &Spawn<'_>,
    output: &mut dyn Output,
    viewport_size: usize
 ) -> Result<CommandResult, ShellError> {
-   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
+   let program = spawn.program;
+   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(spawn)?;
    let start = Instant::now();
    let mut viewport: Vec<String> = Vec::new();
    let mut stderr_lines: Vec<String> = Vec::new();
@@ -182,12 +212,12 @@ fn run_non_tty(
 /// Default mode: animated spinner with scrolling viewport overlay.
 fn run_overlay(
    label: &str,
-   program: &str,
-   args: &[&str],
+   spawn: &Spawn<'_>,
    output: &mut dyn Output,
    viewport_size: usize
 ) -> Result<CommandResult, ShellError> {
-   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(program, args)?;
+   let program = spawn.program;
+   let SpawnedCommand { child, lines, readers } = spawn_command_with_lines(spawn)?;
    let rendered = render_overlay_lines(label, &lines, viewport_size);
    let status = wait_and_join(program, child, readers)?;
    output.step_result(label, status.success(), rendered.elapsed.as_millis(), &rendered.viewport);
@@ -231,9 +261,11 @@ pub(super) fn render_overlay_lines(label: &str, lines: &LineReceiver, viewport_s
    RenderedOverlay { viewport, stderr_lines, elapsed: start.elapsed() }
 }
 
-fn spawn_command_with_lines(program: &str, args: &[&str]) -> Result<SpawnedCommand, ShellError> {
+fn spawn_command_with_lines(spawn: &Spawn<'_>) -> Result<SpawnedCommand, ShellError> {
+   let program = spawn.program;
    let mut child = Command::new(program)
-      .args(args)
+      .args(spawn.args)
+      .envs(spawn.env.iter().map(|(k, v)| (k, v)))
       .stdout(Stdio::piped())
       .stderr(Stdio::piped())
       .spawn()
@@ -362,6 +394,23 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 #[cfg(test)]
 mod tests {
    use super::*;
+
+   #[cfg(unix)]
+   #[test]
+   fn run_command_with_env_sets_child_environment() {
+      // Given — a child that succeeds only when JTCU_TEST_VAR is set to "bar"
+      let env = [("JTCU_TEST_VAR".to_string(), "bar".to_string())];
+      let mut out = crate::output::StringOutput::new();
+      let quiet = OutputMode { level: crate::output::LogLevel::Quiet, dry_run: false };
+
+      // When
+      let result =
+         run_command_with_env("check", "sh", &["-c", "test \"$JTCU_TEST_VAR\" = bar"], &env, &mut out, quiet, 5)
+            .unwrap();
+
+      // Then
+      assert!(result.success);
+   }
    #[cfg(unix)]
    use crate::output::StringOutput;
 
@@ -394,7 +443,7 @@ mod tests {
    #[cfg(unix)]
    fn stdout_reader_preserves_non_ascii_bytes() {
       let SpawnedCommand { mut child, lines, readers } =
-         spawn_command_with_lines("printf", &["café\nnaïve\r"]).expect("spawn printf");
+         spawn_command_with_lines(&Spawn { program: "printf", args: &["café\nnaïve\r"], env: &[] }).expect("spawn printf");
       let mut texts: Vec<String> = Vec::new();
       for line in lines {
          texts.push(match line {

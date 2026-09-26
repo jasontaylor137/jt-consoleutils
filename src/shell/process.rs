@@ -46,6 +46,18 @@ impl Shell for ProcessShell {
       exec::run_command(label, program, args, output, mode, self.config.viewport_size)
    }
 
+   fn run_command_with_env(
+      &self,
+      label: &str,
+      program: &str,
+      args: &[&str],
+      env: &[(String, String)],
+      output: &mut dyn Output,
+      mode: OutputMode
+   ) -> Result<CommandResult, ShellError> {
+      exec::run_command_with_env(label, program, args, env, output, mode, self.config.viewport_size)
+   }
+
    fn shell_exec(&self, script: &str, output: &mut dyn Output, mode: OutputMode) -> Result<CommandResult, ShellError> {
       let (program, flag) = self.config.effective_shell_program();
       shell_exec(script, &program, &flag, output, mode, self.config.viewport_size)

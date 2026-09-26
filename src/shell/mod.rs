@@ -31,7 +31,7 @@ mod process;
 pub mod scripted;
 
 pub use dry::DryRunShell;
-pub use exec::run_command;
+pub use exec::{run_command, run_command_with_env};
 pub use helpers::{command_exists, command_output, command_parts, format_command, shell_exec};
 pub use mock::MockShell;
 pub use process::ProcessShell;
@@ -193,6 +193,29 @@ pub trait Shell {
       output: &mut dyn Output,
       mode: OutputMode
    ) -> Result<CommandResult, ShellError>;
+
+   /// [`Shell::run_command`], with `env` set on the child process on top of
+   /// the inherited environment. Variables are never echoed, so it is safe for
+   /// credentials.
+   ///
+   /// The default ignores `env` and delegates to `run_command` — right for the
+   /// dry-run and mock shells, which never spawn. Shells that spawn real
+   /// processes must override it.
+   /// # Errors
+   ///
+   /// Returns a [`ShellError`] if the process cannot be spawned, waited on, or
+   /// exits with a non-zero status.
+   fn run_command_with_env(
+      &self,
+      label: &str,
+      program: &str,
+      args: &[&str],
+      _env: &[(String, String)],
+      output: &mut dyn Output,
+      mode: OutputMode
+   ) -> Result<CommandResult, ShellError> {
+      self.run_command(label, program, args, output, mode)
+   }
 
    /// Run an arbitrary shell script string. The host shell is taken from
    /// [`ShellConfig::effective_shell_program`] — either a configured
