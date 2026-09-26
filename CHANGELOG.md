@@ -11,11 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Shell::run_command_with_env` (and the free `shell::run_command_with_env`): `run_command` with extra environment variables set on the child process. The variables are never echoed in verbose or dry-run output, so they are safe for credentials. The trait method has a default that ignores `env` and delegates to `run_command` (right for the dry-run and mock shells); `ProcessShell` overrides it.
-
 ### Changed
 
 ### Fixed
+
+## [0.8.1] — 2026-09-26
+
+### Added
+
+- `Shell::run_command_with_env` (and the free `shell::run_command_with_env`): `run_command` with extra environment variables set on the child process. The variables are never echoed in verbose or dry-run output, so they are safe for credentials. The trait method has a default that ignores `env` and delegates to `run_command` (right for the dry-run and mock shells); `ProcessShell` overrides it.
 
 ## [0.8.0] — 2026-09-09
 
@@ -334,6 +338,7 @@ No public item was removed or renamed.
   in `lib.rs`.
 - MIT OR Apache-2.0 dual license.
 
+[0.8.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/jasontaylor137/jt-consoleutils/compare/v0.6.0...v0.7.0
